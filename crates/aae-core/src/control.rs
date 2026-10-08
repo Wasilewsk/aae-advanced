@@ -966,6 +966,21 @@ impl SnapshotOp {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn connection_errors_say_why() {
+        // A port nothing listens on.
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let Err(e) = Controller::connect(port, None).await else {
+            panic!("connected to a closed port");
+        };
+        let message = e.to_string();
+        assert!(message.to_lowercase().contains("refused"), "{message}");
+    }
+
     #[test]
     fn orientation_round_trips() {
         for o in [

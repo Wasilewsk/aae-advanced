@@ -196,6 +196,8 @@ pub async fn wait_until_ready(
     let mut stage = BootStage::WaitingForEmulator;
     progress(stage);
     let mut controller = None;
+    // Why the control service hasn't answered yet, for the error if it never does.
+    let mut unanswered = "its access token wasn't found".to_string();
 
     loop {
         if !is_alive(info.pid) {
@@ -219,11 +221,20 @@ pub async fn wait_until_ready(
                     tokio::time::sleep(Duration::from_millis(250)).await;
                 }
                 let tail = log_tail(&info.log, 15);
+                if !failed && adb.boot_completed().await {
+                    // Not the graphics, then, so not for starting again in software.
+                    return Err(Error::Message(crate::diagnostics::redact(&format!(
+                        "Android started, but the emulator's control service on port {} didn't answer within {} seconds: {unanswered}.\n{tail}",
+                        info.grpc_port,
+                        EMULATOR_ANSWER.as_secs()
+                    ))));
+                }
                 let why = if failed {
                     tail
                 } else {
                     format!(
-                        "The emulator didn't answer within {} seconds.\n{tail}",
+                        "The emulator didn't answer on port {} within {} seconds: {unanswered}.\n{tail}",
+                        info.grpc_port,
                         EMULATOR_ANSWER.as_secs()
                     )
                 };
@@ -233,13 +244,21 @@ pub async fn wait_until_ready(
         if controller.is_none() {
             // The discovery file, and so the token, appears shortly after the process starts.
             if let Some(token) = grpc_token(info) {
-                controller = Controller::connect(info.grpc_port, Some(&token)).await.ok();
+                match Controller::connect(info.grpc_port, Some(&token)).await {
+                    Ok(c) => controller = Some(c),
+                    Err(e) => unanswered = format!("connecting failed: {e}"),
+                }
             }
         }
         if let Some(c) = &controller {
-            if stage == BootStage::WaitingForEmulator && c.status().await.is_ok() {
-                stage = BootStage::WaitingForAndroid;
-                progress(stage);
+            if stage == BootStage::WaitingForEmulator {
+                match c.status().await {
+                    Ok(_) => {
+                        stage = BootStage::WaitingForAndroid;
+                        progress(stage);
+                    }
+                    Err(e) => unanswered = format!("it refused a request: {e}"),
+                }
             }
             if stage == BootStage::WaitingForAndroid {
                 if adb.boot_completed().await {

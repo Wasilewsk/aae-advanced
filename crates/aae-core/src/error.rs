@@ -87,10 +87,10 @@ pub enum Error {
     #[error("{0} isn't available on Googlebook devices.")]
     NotOnGooglebook(&'static str),
 
-    #[error("Could not reach the device's control service: {0}")]
+    #[error("Could not reach the device's control service: {}", with_causes(.0))]
     Connect(#[from] tonic::transport::Error),
 
-    #[error("The device's control service refused a request: {}", .0.message())]
+    #[error("The device's control service refused a request: {}", with_causes(.0))]
     Rpc(#[from] tonic::Status),
 
     #[error("{context}: {source}")]
@@ -118,4 +118,24 @@ impl<T> IoContext<T> for std::io::Result<T> {
             source,
         })
     }
+}
+
+/// An error's message followed by its causes', such as "transport error:
+/// tcp connect error: Connection refused (os error 61)". tonic's own messages
+/// say little without them.
+fn with_causes(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = match error.downcast_ref::<tonic::Status>() {
+        Some(status) => status.message().to_string(),
+        None => error.to_string(),
+    };
+    let mut cause = error.source();
+    while let Some(e) = cause {
+        let part = e.to_string();
+        if !text.contains(&part) {
+            text.push_str(": ");
+            text.push_str(&part);
+        }
+        cause = e.source();
+    }
+    text
 }

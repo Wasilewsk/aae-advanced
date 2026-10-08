@@ -201,6 +201,9 @@ pub fn report(sdk: &Sdk, store: &DeviceStore, version: &str) -> String {
                 if let Some(graphics) = emulator_graphics(&device.dir.join("emulator.log")) {
                     let _ = writeln!(out, "  Graphics: {graphics}");
                 }
+                for line in emulator_control(&device.dir.join("emulator.log")) {
+                    let _ = writeln!(out, "  Control service: {line}");
+                }
                 let log = tail(&device.dir.join("emulator.log"), 80);
                 if !log.is_empty() {
                     let _ = writeln!(out, "  Last lines of its emulator log:");
@@ -554,13 +557,43 @@ fn emulator_graphics(log: &Path) -> Option<String> {
     ))
 }
 
-/// The last lines of a text file, or nothing.
+/// What the emulator's log says about its gRPC control service and the file
+/// that advertises it, such as "Started GRPC server at 127.0.0.1:8554".
+fn emulator_control(log: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(log) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter(|l| !l.starts_with("netsimd"))
+        .filter(|l| {
+            let lower = l.to_ascii_lowercase();
+            lower.contains("grpc") || lower.contains("advertising in")
+        })
+        .map(|l| l.split_once("| ").map_or(l, |(_, rest)| rest).trim().to_string())
+        .take(5)
+        .collect()
+}
+
+/// The last lines of a text file, or nothing. The emulator's network
+/// simulator writes its settings over 30 lines each start; those are left out.
 fn tail(path: &Path, lines: usize) -> String {
     let Ok(text) = std::fs::read(path) else {
         return String::new();
     };
     let text = String::from_utf8_lossy(&text);
-    let all = collapse_repeats(text.lines());
+    let mut in_settings = false;
+    let kept = text.lines().filter(|l| {
+        if in_settings {
+            in_settings = *l != "}";
+            return false;
+        }
+        if l.contains("NetsimdArgs {") {
+            in_settings = true;
+            return false;
+        }
+        true
+    });
+    let all = collapse_repeats(kept);
     let mut out = all[all.len().saturating_sub(lines)..].join("\n");
     if !out.is_empty() {
         out.push('\n');
@@ -772,6 +805,24 @@ mod tests {
         );
         assert!(out.contains("/tmp/android-<user>/"), "{out}");
         assert!(out.contains("io.github.aaron_gh.backtalk"), "{out}");
+    }
+
+    #[test]
+    fn leaves_out_the_network_simulators_settings() {
+        let dir = std::env::temp_dir().join(format!("aae-tail-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("emulator.log");
+        std::fs::write(
+            &log,
+            "INFO | Boot completed\nnetsimd I rust_main.rs:96 - NetsimdArgs {\n    pcap: false,\n    debug: DebugArgs {\n        x: false,\n    },\n}\nINFO | Started GRPC server at 127.0.0.1:8554\n",
+        )
+        .unwrap();
+        assert_eq!(
+            tail(&log, 10),
+            "INFO | Boot completed\nINFO | Started GRPC server at 127.0.0.1:8554\n"
+        );
+        assert_eq!(emulator_control(&log), ["Started GRPC server at 127.0.0.1:8554"]);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
