@@ -17,6 +17,7 @@ use std::process::Command;
 
 use sha2::{Digest, Sha256};
 
+use crate::device::{DeviceKind, DeviceStore};
 use crate::error::{Error, IoContext, Result};
 
 /// The component bundle this version of AAE uses, published as release
@@ -112,6 +113,47 @@ pub fn installed() -> bool {
         && stamp(&utm()).as_deref() == Some(UTM_VERSION)
         && stamp(&cuttlefish()).as_deref() == Some(&cuttlefish_stamp())
         && stamp(&image()).as_deref() == Some(&image_stamp())
+}
+
+/// Whether any of Googlebook OS's files are on this computer, installed or
+/// part way.
+pub fn present() -> bool {
+    root().exists()
+}
+
+/// About how much disk space Googlebook OS's files take. The disk AAE
+/// assembles is a copy-on-write clone of Google's image, sharing its space,
+/// so it isn't counted.
+pub fn size() -> u64 {
+    let clone = std::fs::metadata(image().join("googlebook.raw"))
+        .map(|m| crate::device::allocated(&m))
+        .unwrap_or(0);
+    crate::device::dir_size(&root()).saturating_sub(clone)
+}
+
+/// AAE's Googlebook devices, by name.
+pub fn users(store: &DeviceStore) -> Result<Vec<String>> {
+    Ok(store
+        .list()?
+        .into_iter()
+        .filter(|d| d.meta.kind == DeviceKind::Googlebook)
+        .map(|d| d.meta.name)
+        .collect())
+}
+
+/// Deletes Googlebook OS's files, downloads included, refusing while any of
+/// AAE's devices use them. Returns about how many bytes were freed.
+pub fn remove(store: &DeviceStore) -> Result<u64> {
+    let devices = users(store)?;
+    if !devices.is_empty() {
+        return Err(Error::ImageInUse(
+            super::RELEASE.to_string(),
+            devices.join(", "),
+        ));
+    }
+    let size = size();
+    std::fs::remove_dir_all(root()).context(|| format!("Deleting {}", root().display()))?;
+    Ok(size)
 }
 
 /// Installs whatever is missing. Safe to run again after it stopped part way.

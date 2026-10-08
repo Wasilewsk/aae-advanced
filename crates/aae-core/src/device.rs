@@ -678,13 +678,13 @@ pub(crate) fn dir_size(dir: &Path) -> u64 {
 }
 
 #[cfg(unix)]
-fn allocated(metadata: &std::fs::Metadata) -> u64 {
+pub(crate) fn allocated(metadata: &std::fs::Metadata) -> u64 {
     use std::os::unix::fs::MetadataExt;
     metadata.blocks() * 512
 }
 
 #[cfg(not(unix))]
-fn allocated(metadata: &std::fs::Metadata) -> u64 {
+pub(crate) fn allocated(metadata: &std::fs::Metadata) -> u64 {
     metadata.len()
 }
 

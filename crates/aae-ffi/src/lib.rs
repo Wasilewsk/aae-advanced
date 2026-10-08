@@ -1418,7 +1418,8 @@ impl Engine {
         let (sdk, store) = (self.sdk.clone(), self.store.clone());
         on_runtime(async move {
             tokio::task::spawn_blocking(move || {
-                sdk.system_images()
+                let mut images = sdk
+                    .system_images()
                     .into_iter()
                     .map(|image| {
                         let users = catalog::image_users(&sdk, &store, &image)?;
@@ -1430,7 +1431,17 @@ impl Engine {
                             other_devices: users.others,
                         })
                     })
-                    .collect::<Result<Vec<_>, AaeError>>()
+                    .collect::<Result<Vec<_>, AaeError>>()?;
+                if aae_core::googlebook::install::present() {
+                    images.push(InstalledImageInfo {
+                        sysdir: aae_core::googlebook::TAG.to_string(),
+                        description: format!("{}, virtual machine", aae_core::googlebook::RELEASE),
+                        size: human_size(aae_core::googlebook::install::size()),
+                        devices: aae_core::googlebook::install::users(&store)?,
+                        other_devices: Vec::new(),
+                    });
+                }
+                Ok(images)
             })
             .await
             .map_err(|e| AaeError::Failed {
@@ -1446,6 +1457,9 @@ impl Engine {
         let (sdk, store) = (self.sdk.clone(), self.store.clone());
         on_runtime(async move {
             tokio::task::spawn_blocking(move || {
+                if sysdir == aae_core::googlebook::TAG {
+                    return Ok(human_size(aae_core::googlebook::install::remove(&store)?));
+                }
                 let image = sdk
                     .system_images()
                     .into_iter()

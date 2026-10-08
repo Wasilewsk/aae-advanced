@@ -134,11 +134,14 @@ enum Command {
     RemoveImage {
         /// The version, as its API level, such as 35 or 36.1, or a preview's
         /// name, such as 37.2-beta3.
-        #[arg(long)]
-        api: String,
+        #[arg(long, required_unless_present = "googlebook")]
+        api: Option<String>,
         /// The kind of Android image, when more than one is installed for this API level.
         #[arg(long, value_enum)]
         kind: Option<Kind>,
+        /// Googlebook OS and its virtual machine's files, instead of an Android version.
+        #[arg(long, conflicts_with_all = ["api", "kind"])]
+        googlebook: bool,
         /// Delete without asking.
         #[arg(long)]
         yes: bool,
@@ -1126,7 +1129,8 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Images => {
             let images = ctx.sdk.system_images();
-            if images.is_empty() {
+            let googlebook = aae_core::googlebook::install::present();
+            if images.is_empty() && !googlebook {
                 println!("No Android versions are installed yet.");
             }
             for image in images {
@@ -1134,9 +1138,50 @@ async fn run(cli: Cli) -> Result<()> {
                 let size = human_size(catalog::image_size(&image));
                 println!("{image}. {size}. {}", describe_users(&users));
             }
+            if googlebook {
+                use aae_core::googlebook::{RELEASE, install};
+                let users = catalog::ImageUsers {
+                    devices: install::users(&ctx.store)?,
+                    others: Vec::new(),
+                };
+                let size = human_size(install::size());
+                println!(
+                    "{RELEASE}, virtual machine. {size}. {}",
+                    describe_users(&users)
+                );
+            }
             Ok(())
         }
-        Command::RemoveImage { api, kind, yes } => {
+        Command::RemoveImage {
+            api,
+            kind,
+            googlebook,
+            yes,
+        } => {
+            if googlebook {
+                use aae_core::googlebook::{RELEASE, install};
+                if !install::present() {
+                    anyhow::bail!("{RELEASE} isn't installed.");
+                }
+                let users = install::users(&ctx.store)?;
+                if !users.is_empty() {
+                    anyhow::bail!(
+                        "{RELEASE} can't be deleted while devices use it: {}. Delete those devices first.",
+                        users.join(", ")
+                    );
+                }
+                let size = human_size(install::size());
+                let question =
+                    format!("Delete {RELEASE} and its {size} of files? You can download it again later.");
+                if !yes && !confirm(&question)? {
+                    println!("Nothing was deleted.");
+                    return Ok(());
+                }
+                let freed = install::remove(&ctx.store)?;
+                println!("Deleted {RELEASE}. Freed {}.", human_size(freed));
+                return Ok(());
+            }
+            let api = api.unwrap_or_default();
             let matching: Vec<_> = ctx
                 .sdk
                 .system_images()

@@ -61,6 +61,7 @@ Mac with Apple silicon only.
 
 - Googlebook OS (Android 17, desktop) in a QEMU virtual machine. New Device lists it as "Googlebook OS (Android 17), virtual machine"; `aae create <name> --googlebook`.
 - Installed on first use, into AAE's data folder: AAE's Googlebook components (8 MB), UTM 5.0.6 for its QEMU (300 MB), Google's Cuttlefish image (1.1 GB), from which AAE extracts virtual-device services and kernel modules, and Google's recovery image for the Dell Googlebook (7.6 GB), each checked against a pinned SHA-256; downloads resume. AAE assembles the disk itself, about 20 GB. Google's image is never changed; the disk is a copy-on-write clone of it.
+- Android Versions (File menu) or `aae remove-image --googlebook` deletes these files once no Googlebook device is left.
 - Each device's disk is a clone of the assembled one. Display 1920 by 1200, 4 GB of memory.
 - The same device logic as emulator devices: setup, screen reader, AAE's helper, speech log, speech bridge, inspector, apps, keys and gestures. The VM has a USB keyboard and a virtio touchscreen; adb reaches Android through a port forwarded on 127.0.0.1, authorised with AAE's adb key; sound comes to AAE over SPICE, so volume, mute and audio output work.
 - Back, Home, App Switch, Power and the media keys go through `input keyevent`: a USB keyboard has no such keys.
