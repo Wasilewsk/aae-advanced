@@ -133,6 +133,12 @@ pub fn start(
     }
     command.args(&options.extra_args);
     detach(&mut command);
+    // On a computer that has never run Android Studio the folder may not
+    // exist, and the emulator on Windows then fails to create its lock files
+    // there and never answers.
+    if let Some(dir) = crate::paths::android_user_dir() {
+        std::fs::create_dir_all(&dir).context(|| format!("Creating {}", dir.display()))?;
+    }
 
     let mut child = command
         .spawn()
@@ -436,7 +442,7 @@ fn whoami() -> String {
 /// The last lines of a log file.
 pub fn log_tail(path: &Path, lines: usize) -> String {
     let text = std::fs::read_to_string(path).unwrap_or_default();
-    let all: Vec<&str> = text.lines().collect();
+    let all = crate::diagnostics::collapse_repeats(text.lines());
     all[all.len().saturating_sub(lines)..].join("\n")
 }
 

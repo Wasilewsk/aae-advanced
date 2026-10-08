@@ -183,6 +183,11 @@ pub async fn start_device(
             (info, false)
         }
         Err(_) => {
+            // The emulator can't run Android without it; say how to turn it
+            // on, rather than wait for the emulator to fail.
+            if let crate::setup::Virtualisation::Missing(how) = crate::setup::virtualisation(sdk) {
+                return Err(Error::Message(how));
+            }
             progress(Progress::Starting);
             (emulator::start(sdk, store, device, start)?, true)
         }

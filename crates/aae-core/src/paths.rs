@@ -26,3 +26,18 @@ pub fn devices_dir() -> PathBuf {
 pub fn sdk_dir() -> PathBuf {
     data_dir().join("sdk")
 }
+
+/// The folder the emulator and adb keep their settings, locks and keys in, as
+/// they find it: `ANDROID_USER_HOME`, or `.android` in `ANDROID_PREFS_ROOT`,
+/// `ANDROID_SDK_HOME` or the home folder.
+pub fn android_user_dir() -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("ANDROID_USER_HOME") {
+        return Some(PathBuf::from(dir));
+    }
+    for var in ["ANDROID_PREFS_ROOT", "ANDROID_SDK_HOME"] {
+        if let Some(dir) = std::env::var_os(var) {
+            return Some(PathBuf::from(dir).join(".android"));
+        }
+    }
+    directories::BaseDirs::new().map(|dirs| dirs.home_dir().join(".android"))
+}

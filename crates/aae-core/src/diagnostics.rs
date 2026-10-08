@@ -560,11 +560,37 @@ fn tail(path: &Path, lines: usize) -> String {
         return String::new();
     };
     let text = String::from_utf8_lossy(&text);
-    let all: Vec<&str> = text.lines().collect();
+    let all = collapse_repeats(text.lines());
     let mut out = all[all.len().saturating_sub(lines)..].join("\n");
     if !out.is_empty() {
         out.push('\n');
     }
+    out
+}
+
+/// The lines with each run of identical lines given once, followed by how
+/// many times it came.
+pub(crate) fn collapse_repeats<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut run: Option<(&str, usize)> = None;
+    let end = |run: Option<(&str, usize)>, out: &mut Vec<String>| match run {
+        Some((line, 1)) => out.push(line.to_string()),
+        Some((line, count)) => {
+            out.push(line.to_string());
+            out.push(format!("(the line above {count} times)"));
+        }
+        None => {}
+    };
+    for line in lines {
+        match &mut run {
+            Some((last, count)) if *last == line => *count += 1,
+            _ => {
+                end(run.take(), &mut out);
+                run = Some((line, 1));
+            }
+        }
+    }
+    end(run, &mut out);
     out
 }
 
@@ -746,6 +772,15 @@ mod tests {
         );
         assert!(out.contains("/tmp/android-<user>/"), "{out}");
         assert!(out.contains("io.github.aaron_gh.backtalk"), "{out}");
+    }
+
+    #[test]
+    fn collapses_repeated_lines() {
+        let text = "start\nlock failed\nlock failed\nlock failed\nend";
+        assert_eq!(
+            collapse_repeats(text.lines()),
+            ["start", "lock failed", "(the line above 3 times)", "end"]
+        );
     }
 
     #[test]
