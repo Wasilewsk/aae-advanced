@@ -20,8 +20,7 @@ pub const HELPER_COMPONENT: &str =
 const HELPER_PACKAGE: &str = "io.github.aaron_gh.aae.helper";
 const HELPER_RECEIVER: &str = "io.github.aaron_gh.aae.helper/.CommandReceiver";
 /// Runs the helper's shell tool, as the shell user, which may choose keyboard layouts.
-const HELPER_SHELL_TOOL: &str = "CLASSPATH=$(pm path io.github.aaron_gh.aae.helper | cut -d: -f2) \
-     app_process / io.github.aaron_gh.aae.helper.ShellTool";
+const HELPER_SHELL_TOOL: &str = crate::helper_shell_tool!();
 const HELPER_SET_VOLUME: &str = "io.github.aaron_gh.aae.helper.SET_VOLUME";
 
 /// Google's TalkBack, preinstalled on some images.

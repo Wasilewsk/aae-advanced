@@ -159,8 +159,7 @@ const DALTONIZER: &[(&str, i32)] = &[
     ("tritanomaly", 13),
 ];
 
-const LOCALE_TOOL: &str = "CLASSPATH=$(pm path io.github.aaron_gh.aae.helper | cut -d: -f2) \
-     app_process / io.github.aaron_gh.aae.helper.ShellTool locale";
+const LOCALE_TOOL: &str = crate::helper_shell_tool!("locale");
 
 /// Each setting's value now, by name, as one of its choices' values where
 /// it is one. A setting the device doesn't have, such as dark theme before
@@ -169,7 +168,7 @@ pub async fn read(adb: &Adb) -> Result<Vec<(&'static str, String)>> {
     // One trip to the device for everything but the language.
     let script = [
         "echo font=$(settings get system font_scale)",
-        "echo density=$(wm density | tr '\\n' ' ')",
+        "echo density=$(wm density)",
         "echo night=$(cmd uimode night 2>/dev/null)",
         "echo bold=$(settings get secure font_weight_adjustment)",
         "echo contrast=$(settings get secure high_text_contrast_enabled)",
@@ -315,12 +314,7 @@ pub async fn change(adb: &Adb, name: &str, value: &str) -> Result<String> {
         _ => None,
     };
     if let Some((api, version)) = needs {
-        let sdk: u32 = adb
-            .shell("getprop ro.build.version.sdk")
-            .await?
-            .trim()
-            .parse()
-            .unwrap_or(0);
+        let sdk = adb.api_level().await.unwrap_or(0);
         if sdk < api {
             return Err(Error::Message(format!(
                 "{} came in {version}, so this device doesn't have it.",

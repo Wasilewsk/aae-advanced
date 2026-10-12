@@ -15,7 +15,7 @@ object ServiceList {
 
     fun services(context: Context): JSONArray {
         val pm = context.packageManager
-        val manager = context.getSystemService(AccessibilityManager::class.java)
+        val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
         val out = JSONArray()
         for (info in manager.installedAccessibilityServiceList) {
             val service = info.resolveInfo.serviceInfo

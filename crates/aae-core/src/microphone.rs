@@ -26,8 +26,7 @@ const SETTLE: Duration = Duration::from_millis(500);
 /// The most the emulator takes.
 const MAX_RATE: u32 = 48_000;
 
-const RECORDING_WATCH: &str = "CLASSPATH=$(pm path io.github.aaron_gh.aae.helper | cut -d: -f2) \
-     app_process / io.github.aaron_gh.aae.helper.ShellTool recording-watch";
+const RECORDING_WATCH: &str = crate::helper_shell_tool!("recording-watch");
 
 /// Feeds mono 16-bit samples at `rate` into the device's microphone until the
 /// sender is dropped. Returns the sender, and the task doing it, which ends

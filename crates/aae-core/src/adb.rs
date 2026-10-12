@@ -145,25 +145,53 @@ impl Adb {
         false
     }
 
+    /// The device's Android API level, if it can be read.
+    pub async fn api_level(&self) -> Option<u32> {
+        self.shell("getprop ro.build.version.sdk")
+            .await
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+    }
+
     /// Installs or updates an app, granting the runtime permissions it asks for.
     pub async fn install(&self, apk: &Path) -> Result<()> {
         let path = apk.to_string_lossy();
-        let message = match self.raw(&["install", "-r", "-g", "-t", &path]).await {
+        // Runtime permissions, and -g to grant them, came in Android 6.
+        // Before that, Android grants every permission at install, and its
+        // package manager refuses -g.
+        let api = self.api_level().await;
+        let mut args = vec!["install", "-r", "-t"];
+        if api.is_none_or(|api| api >= 23) {
+            args.push("-g");
+        }
+        args.push(&path);
+        let message = match self.raw(&args).await {
             Ok(out) if out.contains("Success") => return Ok(()),
             Ok(out) => out.trim().to_string(),
             Err(Error::Adb(message)) => message,
             Err(e) => return Err(e),
         };
+        let name = apk
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string());
+        if message.contains("INSTALL_FAILED_OLDER_SDK") {
+            return Err(Error::Adb(match api.map(crate::sdk::android_name) {
+                Some(device) => format!(
+                    "{name} needs a newer Android version than {device}, so Android can't install it. \
+                     Use a build of it made for {device}."
+                ),
+                None => format!(
+                    "{name} needs a newer Android version than this device has, so Android can't install it."
+                ),
+            }));
+        }
         if message.contains("INSTALL_FAILED_NO_MATCHING_ABIS") {
             let abi = self
                 .shell("getprop ro.product.cpu.abi")
                 .await
                 .map(|a| a.trim().to_string())
                 .unwrap_or_default();
-            let name = apk
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| path.to_string());
             return Err(Error::Adb(format!(
                 "{name} has no code for this device's processor ({abi}), so Android can't install it. \
                  Use a build of it that includes {abi}. On an Intel or AMD computer, a device made from \

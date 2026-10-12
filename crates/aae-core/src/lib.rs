@@ -48,6 +48,21 @@ pub mod watch;
 
 pub use error::{Error, Result};
 
+/// The `adb shell` command that runs AAE's helper's shell tool as the shell
+/// user, with these arguments, such as `helper_shell_tool!("locale")`.
+/// Android 5 and 6 have no `cut`, so the APK's path is taken from `pm path`
+/// in the shell itself.
+#[macro_export]
+macro_rules! helper_shell_tool {
+    () => {
+        "P=$(pm path io.github.aaron_gh.aae.helper); CLASSPATH=${P#package:} \
+         app_process / io.github.aaron_gh.aae.helper.ShellTool"
+    };
+    ($args:literal) => {
+        concat!($crate::helper_shell_tool!(), " ", $args)
+    };
+}
+
 /// Code generated from the Android Emulator's gRPC definitions. The module
 /// nesting has to match the protobuf packages so cross-package references resolve.
 #[allow(clippy::all, clippy::pedantic)]
@@ -61,5 +76,18 @@ pub mod proto {
     }
     pub mod emulator_snapshot {
         tonic::include_proto!("emulator_snapshot");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn helper_shell_tool_commands() {
+        assert_eq!(
+            helper_shell_tool!("locale"),
+            "P=$(pm path io.github.aaron_gh.aae.helper); CLASSPATH=${P#package:} \
+             app_process / io.github.aaron_gh.aae.helper.ShellTool locale"
+        );
+        assert!(helper_shell_tool!().ends_with(".ShellTool"));
     }
 }

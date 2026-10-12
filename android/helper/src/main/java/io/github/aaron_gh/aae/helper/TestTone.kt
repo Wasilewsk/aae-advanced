@@ -21,25 +21,27 @@ object TestTone {
         val samples = ShortArray(frames) { i ->
             (sin(2 * PI * hz * i / rate) * Short.MAX_VALUE * 0.8).toInt().toShort()
         }
-        val track = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    // The accessibility volume, which AAE turns up to full,
-                    // so the tone is loud enough to measure.
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(rate)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-            )
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .setBufferSizeInBytes(frames * 2)
-            .build()
+        // AudioTrack.Builder came in Android 6; this constructor is in 5.
+        val track = AudioTrack(
+            AudioAttributes.Builder()
+                // The accessibility volume, which AAE turns up to full,
+                // so the tone is loud enough to measure.
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build(),
+            AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(rate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build(),
+            frames * 2,
+            AudioTrack.MODE_STATIC,
+            AudioManager.AUDIO_SESSION_ID_GENERATE,
+        )
+        if (track.state == AudioTrack.STATE_UNINITIALIZED) {
+            track.release()
+            throw UnsupportedOperationException("the device can't play $rate Hz audio")
+        }
         track.write(samples, 0, frames)
         track.setNotificationMarkerPosition(frames)
         track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {

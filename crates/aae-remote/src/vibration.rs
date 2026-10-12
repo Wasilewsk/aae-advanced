@@ -13,8 +13,7 @@ use tokio::process::Command;
 
 use crate::server::Out;
 
-const WATCH: &str = "CLASSPATH=$(pm path io.github.aaron_gh.aae.helper | cut -d: -f2) \
-     app_process / io.github.aaron_gh.aae.helper.ShellTool vibration-watch";
+const WATCH: &str = aae_core::helper_shell_tool!("vibration-watch");
 
 /// Sends `{"type":"event","event":"vibration","on":true,"effect":…}` when
 /// the device starts vibrating, with what it's playing as Android describes

@@ -34,6 +34,7 @@ object Storage {
         if (Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext().cacheDir
         else context.cacheDir
 
+    @android.annotation.TargetApi(24)
     private fun isUnlocked(context: Context): Boolean =
         (context.getSystemService(Context.USER_SERVICE) as android.os.UserManager).isUserUnlocked
 }
