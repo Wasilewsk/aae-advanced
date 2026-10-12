@@ -1,7 +1,7 @@
 {
-  "version": "0.5.1",
-  "build": 125,
-  "url": "https://github.com/aaron-gh/accessible-android-emulator/releases/download/v0.5.1/AAE-Remote-0.5.1.apk",
-  "sha256": "0bee6d7e48b6a9b6ef05cf3ffd49920f7e15aac9477715c21cc37a71ae053c32",
-  "notes": "Touch point mode in gesture mode, two panes on tablets and unfolded phones, button rows, a collapsible accessibility inspector, Cold Boot, and Fold and Unfold."
+  "version": "0.6.1",
+  "build": 139,
+  "url": "https://github.com/aaron-gh/accessible-android-emulator/releases/download/v0.6.1/AAE-Remote-0.6.1.apk",
+  "sha256": "2724c5ae1e252af51ab17a4ebbcfeba041a24a9fd06e58a670b6cfab9804537e",
+  "notes": "New Device: memory, processor cores and storage. Keyboard mode types the characters the phone's keyboard layout typed."
 }
