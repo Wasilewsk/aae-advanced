@@ -41,7 +41,7 @@ Below these, Android starts but is too slow to use with a screen reader. Setup a
 ### Devices
 
 - Create, copy, rename, wipe and delete. Sizes: small phone, phone, tablet, and foldable (folds in, 337 dp wide folded and 674 dp unfolded). Wipe resets to first setup and keeps name, hardware and volume.
-- Hardware (stopped devices): memory, cores, storage, screen size and density, from next start. `aae hardware <device> memory 4096 cores 6 storage 16G screen 1440x3120 density 560`; `cores auto` reverts to AAE's choice. Reducing storage needs a wipe.
+- Hardware (stopped devices): memory, cores, storage, screen size and density, from next start. `aae hardware <device> memory 4096 cores 6 storage 16G screen 1440x3120 density 560`; `cores auto` reverts to AAE's choice. Less storage needs a wipe, and so does more storage on Android versions with encrypted storage, such as Android 16; AAE's message says which. `aae create` and New Device take memory, cores and storage too. New devices get 6 GB of storage, or 16 GB with Google Play.
 - Export and Import: one `.aaedevice` file with apps, data, settings and named snapshots, between computers with the same processor architecture. The Android version must be installed on the target. `aae export`, `aae import`.
 - No emulator window.
 - Stop doesn't shut Android down: it saves the whole running device, open apps included, as its quick-boot snapshot. Start restores it in a few seconds.

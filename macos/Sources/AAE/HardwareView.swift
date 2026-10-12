@@ -24,7 +24,7 @@ struct HardwareView: View {
                 TextField("Screen height, in pixels", text: $height)
                 TextField("Screen density, in dots per inch", text: $density)
             }
-            Text("Applies at next start. Reducing storage needs a wipe.")
+            Text("Applies at next start. Some storage changes need a wipe.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             HStack {

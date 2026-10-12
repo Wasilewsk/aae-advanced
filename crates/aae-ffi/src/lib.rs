@@ -602,6 +602,34 @@ pub struct HardwareInfo {
     pub density: u32,
 }
 
+/// Memory, cores and storage for a new device. None keeps AAE's default.
+#[derive(uniffi::Record, Clone, Default)]
+pub struct HardwareChoice {
+    pub memory_mb: Option<u32>,
+    pub cores: Option<u32>,
+    pub storage_mb: Option<u32>,
+}
+
+impl From<HardwareChoice> for aae_core::hardware::Choice {
+    fn from(c: HardwareChoice) -> Self {
+        aae_core::hardware::Choice {
+            memory_mb: c.memory_mb,
+            cores: c.cores,
+            storage_mb: c.storage_mb,
+        }
+    }
+}
+
+impl From<aae_core::hardware::Choice> for HardwareChoice {
+    fn from(c: aae_core::hardware::Choice) -> Self {
+        HardwareChoice {
+            memory_mb: c.memory_mb,
+            cores: c.cores,
+            storage_mb: c.storage_mb,
+        }
+    }
+}
+
 impl From<aae_core::hardware::Hardware> for HardwareInfo {
     fn from(h: aae_core::hardware::Hardware) -> Self {
         HardwareInfo {
@@ -1275,13 +1303,34 @@ impl Engine {
         provision::default_screen_reader_apk().map(|p| p.display().to_string())
     }
 
+    /// The memory, cores and storage a new device of this size and Android
+    /// version gets unless chosen. `tag` is the version's, as VersionInfo has it.
+    pub fn default_hardware(&self, profile: DeviceProfile, tag: String) -> HardwareChoice {
+        aae_core::hardware::defaults(profile.into(), tag.contains("playstore")).into()
+    }
+
+    /// Checks the hardware chosen for a new device is within AAE's limits,
+    /// before its Android version is downloaded.
+    pub fn check_hardware(&self, hardware: HardwareChoice) -> Result<(), AaeError> {
+        Ok(aae_core::hardware::check_choice(&hardware.into())?)
+    }
+
+    /// Creates a device. `hardware` doesn't apply to Googlebook OS, whose
+    /// memory, cores and storage are fixed.
     pub fn create_device(
         &self,
         name: String,
         sysdir: String,
         profile: DeviceProfile,
+        hardware: HardwareChoice,
     ) -> Result<DeviceInfo, AaeError> {
+        let choice: aae_core::hardware::Choice = hardware.into();
         if sysdir == aae_core::googlebook::TAG {
+            if choice != Default::default() {
+                return Err(AaeError::Failed {
+                    message: "A Googlebook device's memory, cores and storage are fixed.".into(),
+                });
+            }
             let device = self.store.create_googlebook(&name)?;
             return Ok(DeviceInfo::from_device(&device));
         }
@@ -1293,7 +1342,11 @@ impl Engine {
             .ok_or_else(|| AaeError::Failed {
                 message: "That Android version is no longer installed.".into(),
             })?;
-        let device = self.store.create(&name, &image, profile.into())?;
+        let mut device = self.store.create(&name, &image, profile.into())?;
+        if let Err(e) = aae_core::hardware::choose(&mut device, &choice) {
+            let _ = self.store.delete(&device);
+            return Err(e.into());
+        }
         Ok(DeviceInfo::from_device(&device))
     }
 

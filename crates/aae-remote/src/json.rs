@@ -47,6 +47,7 @@ pub fn version(v: &VersionInfo) -> Value {
         "size": v.size,
         "installed": v.installed,
         "sysdir": v.sysdir,
+        "tag": v.tag,
         "preview": v.preview,
     })
 }

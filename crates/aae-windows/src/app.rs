@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use aae_ffi::{
     AaeError, AppChoice, AppPartInfo, AppPartKind, CheckOutcome, DeviceInfo, DeviceProfile,
-    DownloadListener, Engine, LicenceInfo, ProgressListener, ScreenPoint, ScreenReaderSource,
-    Session, SetupStatus, TouchTarget, TouchTargets, VersionInfo,
+    DownloadListener, Engine, HardwareChoice, LicenceInfo, ProgressListener, ScreenPoint,
+    ScreenReaderSource, Session, SetupStatus, TouchTarget, TouchTargets, VersionInfo,
 };
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Controls::{PBM_SETPOS, TBM_SETPAGESIZE, TBM_SETPOS, TBM_SETRANGE};
@@ -1171,7 +1171,7 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
     // The fields, in order, for the action to find.
     const VERSION: usize = 1;
     const PREVIEWS: usize = 2;
-    const READER: usize = 4;
+    const READER: usize = 8;
     const CHOOSE_READER: i32 = 2;
     const TOGGLE_PREVIEWS: i32 = 3;
     let form = Form {
@@ -1237,6 +1237,19 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         ],
         selected: 1,
     })
+    .field(Field::Edit {
+        label: "&Memory, in megabytes".into(),
+        value: String::new(),
+    })
+    .field(Field::Edit {
+        label: "Processor c&ores".into(),
+        value: String::new(),
+    })
+    .field(Field::Edit {
+        label: "Sto&rage, in megabytes".into(),
+        value: String::new(),
+    })
+    .text("Empty: AAE's default for the size, Android version and this computer.")
     .text(&initial_reader)
     .field(Field::Check {
         label: "&Turn the screen reader's volume up to full".into(),
@@ -1266,15 +1279,55 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         Some(3) => DeviceProfile::Foldable,
         _ => DeviceProfile::Phone,
     };
-    let volume_boost = answer.values[5].checked();
+    let number = |field: usize, what: &str| -> Result<Option<u32>, String> {
+        let text = answer.values[field].text();
+        let text = text.trim();
+        if text.is_empty() {
+            return Ok(None);
+        }
+        text.parse()
+            .map(Some)
+            .map_err(|_| format!("{what} takes a whole number."))
+    };
+    let hardware = match (
+        number(4, "Memory"),
+        number(5, "Processor cores"),
+        number(6, "Storage"),
+    ) {
+        (Ok(memory_mb), Ok(cores), Ok(storage_mb)) => HardwareChoice {
+            memory_mb,
+            cores,
+            storage_mb,
+        },
+        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
+            announce(&e, Tone::Failure);
+            return;
+        }
+    };
+    // Before anything downloads.
+    if let Some(engine) = engine()
+        && let Err(e) = engine.check_hardware(hardware.clone())
+    {
+        announce(&e.to_string(), Tone::Failure);
+        return;
+    }
+    let volume_boost = answer.values[9].checked();
     let screen_reader = reader.lock().unwrap().clone();
-    create_device(name, version, profile, screen_reader, volume_boost);
+    create_device(
+        name,
+        version,
+        profile,
+        hardware,
+        screen_reader,
+        volume_boost,
+    );
 }
 
 fn create_device(
     name: String,
     version: VersionInfo,
     profile: DeviceProfile,
+    hardware: HardwareChoice,
     screen_reader: Option<String>,
     volume_boost: bool,
 ) {
@@ -1287,20 +1340,23 @@ fn create_device(
                 None => return,
             }
         }
-        run_on_ui(move || match engine.create_device(name, sysdir, profile) {
-            Ok(device) => {
-                let id = device.id.clone();
-                with(|app| {
-                    app.first_start
-                        .insert(id.clone(), (screen_reader, volume_boost));
-                    app.refresh();
-                    app.selection = Some(id.clone());
-                    app.render();
-                });
-                announce(&format!("Created {}.", device.name), Tone::Success);
-                start(Some(id));
+        run_on_ui(move || {
+            let created = engine.create_device(name, sysdir, profile, hardware);
+            match created {
+                Ok(device) => {
+                    let id = device.id.clone();
+                    with(|app| {
+                        app.first_start
+                            .insert(id.clone(), (screen_reader, volume_boost));
+                        app.refresh();
+                        app.selection = Some(id.clone());
+                        app.render();
+                    });
+                    announce(&format!("Created {}.", device.name), Tone::Success);
+                    start(Some(id));
+                }
+                Err(e) => announce(&e.to_string(), Tone::Failure),
             }
-            Err(e) => announce(&e.to_string(), Tone::Failure),
         });
     });
 }
@@ -2342,7 +2398,7 @@ fn edit_hardware() {
             .field(field("Screen &width, in pixels", hardware.width))
             .field(field("Screen &height, in pixels", hardware.height))
             .field(field("Screen &density, in dots per inch", hardware.density))
-            .text("Applies at next start. Reducing storage needs a wipe.")
+            .text("Applies at next start. Some storage changes need a wipe.")
             .button("Save", 1, Role::Default)
             .button("Cancel", 0, Role::Cancel),
     );

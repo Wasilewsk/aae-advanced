@@ -50,7 +50,7 @@ impl Profile {
     }
 
     /// Width, height, density and memory in megabytes.
-    fn hardware(self) -> (u32, u32, u32, u32) {
+    pub(crate) fn hardware(self) -> (u32, u32, u32, u32) {
         match self {
             Profile::SmallPhone => (720, 1280, 320, 2048),
             Profile::Phone => (1080, 2400, 420, 2048),
@@ -584,7 +584,10 @@ fn write_config_ini(device: &Device) -> Result<()> {
         ("hw.lcd.density", density.to_string()),
         ("hw.ramSize", ram.to_string()),
         ("vm.heapSize", "256".into()),
-        ("disk.dataPartition.size", "6G".into()),
+        (
+            "disk.dataPartition.size",
+            format!("{}M", crate::hardware::default_storage_mb(play)),
+        ),
         ("hw.keyboard", "yes".into()),
         ("hw.keyboard.lid", "no".into()),
         ("hw.mainKeys", "no".into()),

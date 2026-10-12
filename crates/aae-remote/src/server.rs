@@ -628,6 +628,34 @@ impl aae_ffi::DownloadListener for Progress {
     }
 }
 
+/// A new device's kind, as "profile": "small-phone", "phone", "tablet" or "foldable".
+fn profile(params: &Value) -> DeviceProfile {
+    match params["profile"].as_str().unwrap_or("phone") {
+        "small-phone" => DeviceProfile::SmallPhone,
+        "tablet" => DeviceProfile::Tablet,
+        "foldable" => DeviceProfile::Foldable,
+        _ => DeviceProfile::Phone,
+    }
+}
+
+/// A new device's memory, cores and storage, as "memory_mb", "cores" and
+/// "storage_mb". Each is optional; AAE's default otherwise.
+fn hardware_choice(params: &Value) -> Result<aae_ffi::HardwareChoice, AaeError> {
+    let number = |key: &str| match &params[key] {
+        Value::Null => Ok(None),
+        value => value
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .map(Some)
+            .ok_or_else(|| failed(format!("\"{key}\" must be a whole number."))),
+    };
+    Ok(aae_ffi::HardwareChoice {
+        memory_mb: number("memory_mb")?,
+        cores: number("cores")?,
+        storage_mb: number("storage_mb")?,
+    })
+}
+
 fn failed(message: impl Into<String>) -> AaeError {
     AaeError::Failed {
         message: message.into(),
@@ -676,18 +704,24 @@ async fn call(
                 .map(json::device)
                 .collect::<Vec<_>>()
         ),
-        "devices.create" => {
-            let profile = match params["profile"].as_str().unwrap_or("phone") {
-                "small-phone" => DeviceProfile::SmallPhone,
-                "tablet" => DeviceProfile::Tablet,
-                "foldable" => DeviceProfile::Foldable,
-                _ => DeviceProfile::Phone,
-            };
-            json::device(&engine.create_device(
-                param(params, "name")?,
-                param(params, "sysdir")?,
-                profile,
-            )?)
+        "devices.create" => json::device(&engine.create_device(
+            param(params, "name")?,
+            param(params, "sysdir")?,
+            profile(params),
+            hardware_choice(params)?,
+        )?),
+        // What a new device of this kind and version gets unless chosen.
+        "devices.hardware_defaults" => {
+            let d = engine.default_hardware(
+                profile(params),
+                params["tag"].as_str().unwrap_or_default().to_string(),
+            );
+            json!({ "memory_mb": d.memory_mb, "cores": d.cores, "storage_mb": d.storage_mb })
+        }
+        // Checked before an Android version downloads.
+        "devices.check_hardware" => {
+            engine.check_hardware(hardware_choice(params)?)?;
+            Value::Null
         }
         "device.start" => {
             let id = id()?;

@@ -12,6 +12,10 @@ struct NewDeviceView: View {
     @State private var profile = 1
     @State private var screenReader: String?
     @State private var volumeBoost = true
+    @State private var memory = ""
+    @State private var cores = ""
+    @State private var storage = ""
+    @State private var defaults = (memory: "", cores: "", storage: "")
 
     private let profiles: [(String, DeviceProfile)] = [
         ("Small phone", .smallPhone),
@@ -38,6 +42,7 @@ struct NewDeviceView: View {
                     if model.versions.indices.contains(index) {
                         chosenID = model.versions[index].id
                     }
+                    loadDefaults()
                 }
                 // When the list changes, such as with previews turned on, the
                 // version chosen stays chosen.
@@ -55,6 +60,13 @@ struct NewDeviceView: View {
                             Text(profiles[index].0).tag(index)
                         }
                     }
+                    .onChange(of: profile) { _ in loadDefaults() }
+                    TextField("Memory, in megabytes", text: $memory, prompt: Text(defaults.memory))
+                    TextField("Processor cores", text: $cores, prompt: Text(defaults.cores))
+                    TextField("Storage, in megabytes", text: $storage, prompt: Text(defaults.storage))
+                    Text("Empty fields use the defaults shown.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
 
                 HStack {
@@ -82,7 +94,14 @@ struct NewDeviceView: View {
             // Start on the newest installed version, so nothing downloads by surprise.
             versionIndex = model.versions.firstIndex(where: \.installed) ?? 0
             model.loadVersions()
+            loadDefaults()
         }
+    }
+
+    /// AAE's memory, cores and storage for the size and version chosen, shown in empty fields.
+    private func loadDefaults() {
+        let tag = model.versions.indices.contains(versionIndex) ? model.versions[versionIndex].tag : ""
+        defaults = model.defaultHardware(for: profiles[profile].1, tag: tag)
     }
 
     private var isGooglebook: Bool {
@@ -110,11 +129,31 @@ struct NewDeviceView: View {
     private func create() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, model.versions.indices.contains(versionIndex) else { return }
+        var hardware = HardwareChoice(memoryMb: nil, cores: nil, storageMb: nil)
+        if !isGooglebook {
+            let fields = [("Memory", memory), ("Processor cores", cores), ("Storage", storage)]
+            var numbers: [UInt32?] = []
+            for (label, text) in fields {
+                let text = text.trimmingCharacters(in: .whitespaces)
+                if text.isEmpty {
+                    numbers.append(nil)
+                } else if let number = UInt32(text) {
+                    numbers.append(number)
+                } else {
+                    model.announce("\(label) takes a whole number.", tone: .failure)
+                    return
+                }
+            }
+            hardware = HardwareChoice(memoryMb: numbers[0], cores: numbers[1], storageMb: numbers[2])
+            // Before anything downloads.
+            guard model.checkHardware(hardware) else { return }
+        }
         dismiss()
         model.create(
             name: trimmed,
             version: model.versions[versionIndex],
             profile: profiles[profile].1,
+            hardware: hardware,
             screenReader: screenReader,
             volumeBoost: volumeBoost
         )

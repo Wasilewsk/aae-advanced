@@ -41,6 +41,13 @@ pub(crate) struct CreateParam {
     pub version: String,
     /// "small-phone", "phone" (the default), "tablet" or "foldable".
     pub size: Option<String>,
+    /// Memory in megabytes. Defaults to 2048, or 3072 for a tablet or foldable.
+    pub memory_mb: Option<u32>,
+    /// Processor cores. Defaults to as many as suit this computer.
+    pub cores: Option<u32>,
+    /// Storage for apps and data, in megabytes. Defaults to 16384 with
+    /// Google Play, otherwise 6144.
+    pub storage_mb: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -344,7 +351,12 @@ impl AaeServer {
                     Some(ref s) if s == "phone" => DeviceProfile::Phone,
                     Some(other) => anyhow::bail!("\"{other}\" isn't a size. Use small-phone, phone, tablet or foldable."),
                 };
-                let device = self.engine.create_device(p.name.clone(), image.sysdir.clone(), profile)?;
+                let hardware = aae_ffi::HardwareChoice {
+                    memory_mb: p.memory_mb,
+                    cores: p.cores,
+                    storage_mb: p.storage_mb,
+                };
+                let device = self.engine.create_device(p.name.clone(), image.sysdir.clone(), profile, hardware)?;
                 text(format!(
                     "Created {}, {}. Start it with start_device.",
                     device.name, device.android

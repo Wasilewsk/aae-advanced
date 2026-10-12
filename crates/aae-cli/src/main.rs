@@ -212,6 +212,16 @@ enum Command {
         /// After it starts, send this terminal's keyboard and the device's audio to it.
         #[arg(long)]
         attach: bool,
+        /// Memory, in megabytes or as a size such as 4G. Defaults to the profile's.
+        #[arg(long, value_parser = memory_arg)]
+        memory: Option<u32>,
+        /// Processor cores. Defaults to as many as suit this computer.
+        #[arg(long)]
+        cores: Option<u32>,
+        /// Storage for apps and data, such as 32G or 8192M. Defaults to 16G
+        /// with Google Play, otherwise 6G.
+        #[arg(long, value_parser = storage_arg)]
+        storage: Option<u32>,
     },
     /// Copy a device, with its apps and data, under a new name.
     Clone { device: String, new_name: String },
@@ -1254,7 +1264,19 @@ async fn run(cli: Cli) -> Result<()> {
             no_start,
             accept_licence,
             attach,
+            memory,
+            cores,
+            storage,
         } => {
+            let hardware = aae_core::hardware::Choice {
+                memory_mb: memory,
+                cores,
+                storage_mb: storage,
+            };
+            if googlebook && hardware != Default::default() {
+                bail!("A Googlebook device's memory, cores and storage are fixed.");
+            }
+            aae_core::hardware::check_choice(&hardware)?;
             let mut device = if googlebook {
                 if !aae_core::googlebook::install::installed() {
                     install_googlebook().await?;
@@ -1267,7 +1289,12 @@ async fn run(cli: Cli) -> Result<()> {
                     (Err(_), Some(api)) => download_image(&ctx, api, kind, accept_licence).await?,
                     (Err(e), None) => return Err(e),
                 };
-                ctx.store.create(&name, &image, profile.into())?
+                let mut device = ctx.store.create(&name, &image, profile.into())?;
+                if let Err(e) = aae_core::hardware::choose(&mut device, &hardware) {
+                    let _ = ctx.store.delete(&device);
+                    return Err(e.into());
+                }
+                device
             };
             println!("Created {}.", device.describe());
             if no_start {
@@ -2448,11 +2475,7 @@ async fn run(cli: Cli) -> Result<()> {
                         .map_err(|_| anyhow!("{name} takes a number, not {value}."))
                 };
                 match name.as_str() {
-                    "memory" | "ram" => {
-                        hw.memory_mb = hardware::parse_size_mb(value)
-                            .filter(|_| value.chars().any(|c| c.is_alphabetic()))
-                            .map_or_else(number, Ok)?
-                    }
+                    "memory" | "ram" => hw.memory_mb = memory_arg(value).map_err(|e| anyhow!(e))?,
                     "cores" | "cpus" if value.eq_ignore_ascii_case("auto") => {
                         // AAE chooses, for the computer, again.
                         device.meta.cores = None;
@@ -2461,13 +2484,7 @@ async fn run(cli: Cli) -> Result<()> {
                     }
                     "cores" | "cpus" => hw.cores = number()?,
                     "storage" | "disk" => {
-                        hw.storage_mb = if value.chars().any(|c| c.is_alphabetic()) {
-                            hardware::parse_size_mb(value).ok_or_else(|| {
-                                anyhow!("Storage is a size, such as 16G or 8192M.")
-                            })?
-                        } else {
-                            number()?
-                        }
+                        hw.storage_mb = storage_arg(value).map_err(|e| anyhow!(e))?
                     }
                     "screen" | "size" => {
                         let (w, h) = value
@@ -3348,6 +3365,26 @@ fn parse_point(text: &str) -> Result<(i32, i32), String> {
     text.split_once(',')
         .and_then(|(x, y)| Some((x.trim().parse().ok()?, y.trim().parse().ok()?)))
         .ok_or_else(|| format!("\"{text}\" is not a point. Give it as X,Y, such as 540,1200."))
+}
+
+/// Reads memory given in megabytes, or as a size such as 4G.
+fn memory_arg(text: &str) -> Result<u32, String> {
+    size_mb(text)
+        .ok_or_else(|| format!("Memory is megabytes or a size, such as 4096 or 4G, not {text}."))
+}
+
+/// Reads storage given in megabytes, or as a size such as 16G.
+fn storage_arg(text: &str) -> Result<u32, String> {
+    size_mb(text).ok_or_else(|| format!("Storage is a size, such as 16G or 8192M, not {text}."))
+}
+
+/// A size with a unit, or a plain number of megabytes.
+fn size_mb(text: &str) -> Option<u32> {
+    if text.chars().any(|c| c.is_alphabetic()) {
+        aae_core::hardware::parse_size_mb(text)
+    } else {
+        text.trim().parse().ok()
+    }
 }
 
 /// Which devices use an Android version, in words.

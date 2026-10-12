@@ -445,21 +445,39 @@ final class AppModel: ObservableObject {
 
     // MARK: - Devices
 
-    func create(name: String, version: VersionInfo, profile: DeviceProfile, screenReader: String?, volumeBoost: Bool) {
+    /// A new device's default memory, cores and storage, as the new device form shows them.
+    func defaultHardware(for profile: DeviceProfile, tag: String) -> (memory: String, cores: String, storage: String) {
+        guard let defaults = engine?.defaultHardware(profile: profile, tag: tag) else { return ("", "", "") }
+        let text = { (n: UInt32?) in n.map(String.init) ?? "" }
+        return (text(defaults.memoryMb), text(defaults.cores), text(defaults.storageMb))
+    }
+
+    /// Whether a new device's memory, cores and storage are within AAE's limits. Says what isn't.
+    func checkHardware(_ hardware: HardwareChoice) -> Bool {
+        do {
+            try engine?.checkHardware(hardware: hardware)
+            return true
+        } catch {
+            announce(error.localizedDescription, tone: .failure)
+            return false
+        }
+    }
+
+    func create(name: String, version: VersionInfo, profile: DeviceProfile, hardware: HardwareChoice, screenReader: String?, volumeBoost: Bool) {
         Task {
             var sysdir = version.sysdir
             if !version.installed {
                 guard let installed = await installVersion(version) else { return }
                 sysdir = installed
             }
-            createInstalled(name: name, sysdir: sysdir, profile: profile, screenReader: screenReader, volumeBoost: volumeBoost)
+            createInstalled(name: name, sysdir: sysdir, profile: profile, hardware: hardware, screenReader: screenReader, volumeBoost: volumeBoost)
         }
     }
 
-    private func createInstalled(name: String, sysdir: String, profile: DeviceProfile, screenReader: String?, volumeBoost: Bool) {
+    private func createInstalled(name: String, sysdir: String, profile: DeviceProfile, hardware: HardwareChoice, screenReader: String?, volumeBoost: Bool) {
         guard let engine else { return }
         do {
-            let device = try engine.createDevice(name: name, sysdir: sysdir, profile: profile)
+            let device = try engine.createDevice(name: name, sysdir: sysdir, profile: profile, hardware: hardware)
             firstStart[device.id] = (screenReader, volumeBoost)
             refresh()
             selection = device.id
