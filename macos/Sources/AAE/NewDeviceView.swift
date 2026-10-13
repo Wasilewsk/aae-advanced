@@ -62,8 +62,14 @@ struct NewDeviceView: View {
                     }
                     .onChange(of: profile) { _ in loadDefaults() }
                     TextField("Memory, in megabytes", text: $memory, prompt: Text(defaults.memory))
+                        .accessibilityLabel("Memory, in megabytes")
+                        .accessibilityHint("Default \(defaults.memory)")
                     TextField("Processor cores", text: $cores, prompt: Text(defaults.cores))
+                        .accessibilityLabel("Processor cores")
+                        .accessibilityHint("Default \(defaults.cores)")
                     TextField("Storage, in megabytes", text: $storage, prompt: Text(defaults.storage))
+                        .accessibilityLabel("Storage, in megabytes")
+                        .accessibilityHint("Default \(defaults.storage)")
                     Text("Empty fields use the defaults shown.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
