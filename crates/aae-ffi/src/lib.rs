@@ -1896,6 +1896,14 @@ impl Session {
         self.device.lock().unwrap().id.clone()
     }
 
+    /// The device as saved now: the apps, aae serve and the CLI each change
+    /// it, and a copy kept from when the session opened would undo them.
+    fn current_device(&self) -> Device {
+        let mut device = self.device.lock().unwrap();
+        device.reload_meta();
+        device.clone()
+    }
+
     /// Starts speaking for the device's screen reader, taking its speech
     /// over from any desktop app, as AAE Remote's server does for the phone
     /// using the device.
@@ -2350,8 +2358,8 @@ impl Session {
     ) -> Result<String, AaeError> {
         {
             let mut device = self.device.lock().unwrap();
-            device.meta.audio_output = output.clone();
-            device.save_meta()?;
+            let chosen = output.clone();
+            device.update_meta(|meta| meta.audio_output = chosen)?;
         }
         if self.audio.lock().unwrap().is_some() {
             self.restart_audio(correct_pitch).await?;
@@ -2373,8 +2381,7 @@ impl Session {
             player.set_volume(volume);
         }
         let mut device = self.device.lock().unwrap();
-        device.meta.playback_volume = (volume < 1.0).then_some(volume);
-        Ok(device.save_meta()?)
+        Ok(device.update_meta(|meta| meta.playback_volume = (volume < 1.0).then_some(volume))?)
     }
 
     /// Silences this device while another is the one in use, or plays it
@@ -2396,7 +2403,7 @@ impl Session {
 
     /// Sets the screen reader's volume on the device, from 0 to 100.
     pub async fn set_screen_reader_volume(&self, percent: u8) -> Result<i32, AaeError> {
-        let mut device = self.device.lock().unwrap().clone();
+        let mut device = self.current_device();
         let adb = self.adb.clone();
         let index = on_runtime(async move {
             let index = provision::boost_volume(&mut device, &adb, percent).await?;
@@ -2426,7 +2433,7 @@ impl Session {
     /// Reads the screen's accessibility tree, as a screen reader sees it, and
     /// checks it for common problems.
     pub async fn inspect(&self) -> Result<Inspection, AaeError> {
-        let device = self.device.lock().unwrap().clone();
+        let device = self.current_device();
         let (sdk, adb) = (self.sdk.clone(), self.adb.clone());
         on_runtime(async move {
             let helper = provision::HELPER_COMPONENT.to_string();
@@ -2502,7 +2509,7 @@ impl Session {
 
     /// Sets the speech relay's roles; None leaves a role unchanged.
     async fn set_relay(&self, log: Option<bool>, bridge: Option<bool>) -> Result<(), AaeError> {
-        let mut device = self.device.lock().unwrap().clone();
+        let mut device = self.current_device();
         let (sdk, adb) = (self.sdk.clone(), self.adb.clone());
         let device = on_runtime(async move {
             provision::update_helper(&sdk, &adb).await?;
@@ -2691,7 +2698,7 @@ impl Session {
     /// Turns AAE's helper on (true), for reading the screen, or back to how
     /// the device keeps it (false).
     pub async fn use_helper(&self, on: bool) -> Result<(), AaeError> {
-        let device = self.device.lock().unwrap().clone();
+        let device = self.current_device();
         let adb = self.adb.clone();
         on_runtime(async move {
             let helper = provision::HELPER_COMPONENT.to_string();
@@ -3216,7 +3223,7 @@ impl Session {
 
     /// The accessibility services installed on the device, screen readers first.
     pub async fn list_services(&self) -> Result<Vec<ServiceInfo>, AaeError> {
-        let device = self.device.lock().unwrap().clone();
+        let device = self.current_device();
         let (sdk, adb) = (self.sdk.clone(), self.adb.clone());
         on_runtime(async move {
             provision::update_helper(&sdk, &adb).await?;
@@ -3239,7 +3246,7 @@ impl Session {
     /// Turns a service on, to stay on, or off. Turning on a screen reader
     /// makes it the device's screen reader instead of the one it had.
     pub async fn set_service(&self, component: String, on: bool) -> Result<(), AaeError> {
-        let mut device = self.device.lock().unwrap().clone();
+        let mut device = self.current_device();
         let adb = self.adb.clone();
         let device = on_runtime(async move {
             use aae_core::services;
@@ -3481,7 +3488,7 @@ impl Session {
 
     /// Whether the device's screen reader is running right now, in words.
     pub async fn screen_reader_status(&self) -> Result<String, AaeError> {
-        let device = self.device.lock().unwrap().clone();
+        let device = self.current_device();
         let adb = self.adb.clone();
         on_runtime(async move {
             let Some(reader) = device.meta.screen_reader.clone() else {
@@ -3507,7 +3514,7 @@ impl Session {
     /// Turns the device's kept services back on if Android turned any off.
     /// Returns what was turned back on, in words, or nothing.
     pub async fn guard_services(&self) -> Result<Option<String>, AaeError> {
-        let device = self.device.lock().unwrap().clone();
+        let device = self.current_device();
         let adb = self.adb.clone();
         on_runtime(async move {
             let restored = provision::guard_services(&device, &adb).await?;
@@ -3531,7 +3538,7 @@ impl Session {
     /// Installs an app and turns on any accessibility services it has. Returns
     /// what happened, in words.
     pub async fn install_apk(&self, path: String) -> Result<InstallResult, AaeError> {
-        let mut device = self.device.lock().unwrap().clone();
+        let mut device = self.current_device();
         let (sdk, adb) = (self.sdk.clone(), self.adb.clone());
         let (result, device) = on_runtime(async move {
             let (info, parts) =
@@ -3551,7 +3558,7 @@ impl Session {
     /// Turns app parts on or off as the user chose, and remembers the
     /// choices for this device.
     pub async fn set_app_choices(&self, choices: Vec<AppChoice>) -> Result<(), AaeError> {
-        let mut device = self.device.lock().unwrap().clone();
+        let mut device = self.current_device();
         let adb = self.adb.clone();
         let device = on_runtime(async move {
             let choices: Vec<(provision::AppPart, bool)> =

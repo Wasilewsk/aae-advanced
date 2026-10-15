@@ -300,9 +300,17 @@ pub async fn set_relay(
         }
         (false, None) => {}
     }
-    device.meta.speech_log = Some(speech_log);
-    device.meta.speech_bridge = bridge;
-    device.save_meta()
+    // Only the relay's fields: the rest may have changed on disk meanwhile.
+    let (engine, verified) = (
+        device.meta.speech_log_engine.clone(),
+        device.meta.relay_verified.clone(),
+    );
+    device.update_meta(|meta| {
+        meta.speech_log_engine = engine;
+        meta.relay_verified = verified;
+        meta.speech_log = Some(speech_log);
+        meta.speech_bridge = bridge;
+    })
 }
 
 /// What the screen reader said after `since` (milliseconds since 1970).

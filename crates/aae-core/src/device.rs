@@ -267,6 +267,23 @@ impl Device {
         write_toml(&self.dir.join(META_FILE), &self.meta)
     }
 
+    /// Rereads the metadata from disk, for a copy held while the apps, aae
+    /// serve or the CLI may have changed it. Keeps this copy if the file
+    /// can't be read.
+    pub fn reload_meta(&mut self) {
+        if let Some(fresh) = load_device(&self.dir) {
+            self.meta = fresh.meta;
+        }
+    }
+
+    /// Rereads the metadata, changes it and saves it, so a long-held copy
+    /// doesn't overwrite what changed on disk since it was read.
+    pub fn update_meta(&mut self, change: impl FnOnce(&mut DeviceMeta)) -> Result<()> {
+        self.reload_meta();
+        change(&mut self.meta);
+        self.save_meta()
+    }
+
     pub fn runtime(&self) -> Option<RuntimeInfo> {
         let path = self.dir.join(RUNTIME_FILE);
         let text = std::fs::read_to_string(path).ok()?;
@@ -745,6 +762,23 @@ mod tests {
         let mut older = reread.clone();
         older.meta.release = None;
         assert_eq!(older.android(), "Android 17 (API 37)");
+        let _ = std::fs::remove_dir_all(&store.root);
+    }
+
+    #[test]
+    fn update_keeps_changes_saved_by_another_copy() {
+        let store = temp_store("update");
+        let mut held = store.create("Held", &image(), Profile::Phone).unwrap();
+        let mut other = store.get("Held").unwrap();
+        other.meta.screen_reader = Some("fyi.quin.backtalk/.Service".into());
+        other.save_meta().unwrap();
+        held.update_meta(|meta| meta.speech_bridge = true).unwrap();
+        let reread = store.get("Held").unwrap();
+        assert_eq!(
+            reread.meta.screen_reader.as_deref(),
+            Some("fyi.quin.backtalk/.Service")
+        );
+        assert!(reread.meta.speech_bridge);
         let _ = std::fs::remove_dir_all(&store.root);
     }
 
