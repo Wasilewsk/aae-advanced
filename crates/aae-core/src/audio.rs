@@ -22,9 +22,20 @@ use crate::error::{Error, Result};
 /// The highest rate the emulator produces. Android itself rarely goes above 48 kHz.
 const MAX_SOURCE_RATE: u32 = 48_000;
 /// Audio buffered before playback starts, and after a gap. Smooths jitter:
-/// the emulator sends about 10 ms of audio every 11 ms, rarely more than
+/// the emulator sends 10 to 12.5 ms of audio at a time, rarely more than
 /// 23 ms apart, so twice a packet is enough.
-const PREFILL: Duration = Duration::from_millis(20);
+const PREFILL: Duration = Duration::from_millis(25);
+/// The buffer level playback steers towards, by playing slightly faster or
+/// slower. The emulator sends audio up to 1% slower than real time (47,500
+/// frames a second for 48 kHz on Android 11), so at a fixed rate the buffer
+/// runs dry every few seconds of speech and the sound breaks up.
+const TARGET_BUFFERED: Duration = Duration::from_millis(30);
+/// The most playback speeds up or slows down to follow the emulator, as a
+/// fraction. 2% changes the pitch by a third of a semitone at most.
+const MAX_DRIFT: f64 = 0.02;
+/// How quickly the speed follows the buffer level, in seconds. Slow enough
+/// not to wobble with each packet's arrival.
+const DRIFT_SMOOTHING: f64 = 0.25;
 /// If more than this is buffered, the oldest audio is dropped to catch up,
 /// so delay can't build up if the emulator runs slightly fast.
 const MAX_BUFFERED: Duration = Duration::from_millis(60);
@@ -345,9 +356,15 @@ fn run_output(
             controls: controls.clone(),
             stats: stats.clone(),
             channels: channels as usize,
+            rate: rate as f64,
             prefill: frames(rate, PREFILL) * 2,
+            target: frames(rate, TARGET_BUFFERED) as f64,
             max_buffered: frames(rate, MAX_BUFFERED) * 2,
             playing: false,
+            level: 0.0,
+            position: 1.0,
+            from: [0.0; 2],
+            to: [0.0; 2],
         };
         let stream = match supported.sample_format() {
             cpal::SampleFormat::F32 => build::<f32>(&device, &config, player),
@@ -410,10 +427,20 @@ struct Playback {
     controls: Arc<Controls>,
     stats: Arc<AudioStats>,
     channels: usize,
+    rate: f64,
     /// Stereo samples (not frames) to buffer before starting.
     prefill: usize,
+    /// Frames.
+    target: f64,
     max_buffered: usize,
     playing: bool,
+    /// Frames buffered, smoothed.
+    level: f64,
+    /// How far playback is from `from` to `to`, the two frames it is
+    /// between, from 0 to 1.
+    position: f64,
+    from: [f32; 2],
+    to: [f32; 2],
 }
 
 impl Playback {
@@ -423,13 +450,25 @@ impl Playback {
             // Fell behind: drop the oldest audio, keeping whole frames.
             let excess = (buffered - self.prefill) & !1;
             self.consumer.skip(excess);
+            self.level = (self.prefill / 2) as f64;
             self.stats
                 .dropped
                 .fetch_add(excess as u64, Ordering::Relaxed);
         }
         if !self.playing && self.consumer.occupied_len() >= self.prefill {
             self.playing = true;
+            self.level = (self.consumer.occupied_len() / 2) as f64;
+            self.position = 1.0;
+            self.from = [0.0; 2];
+            self.to = [0.0; 2];
         }
+        // Frames of input per frame of output: below 1 plays slower, so the
+        // buffer fills, above 1 faster.
+        let frames = (out.len() / self.channels.max(1)) as f64;
+        let follow = (frames / (self.rate * DRIFT_SMOOTHING)).min(1.0);
+        self.level += follow * ((self.consumer.occupied_len() / 2) as f64 - self.level);
+        let step = 1.0
+            + ((self.level - self.target) / self.target * MAX_DRIFT).clamp(-MAX_DRIFT, MAX_DRIFT);
         let gain = if self.controls.muted.load(Ordering::Relaxed)
             || self.controls.background.load(Ordering::Relaxed)
         {
@@ -439,15 +478,30 @@ impl Playback {
         };
         let silence = T::from_sample(0.0f32);
         for frame in out.chunks_mut(self.channels) {
-            let mut lr = [0i16; 2];
-            if self.playing && self.consumer.pop_slice(&mut lr) < 2 {
-                // Ran dry. Wait for the buffer to refill before resuming.
-                self.playing = false;
-                self.stats.underruns.fetch_add(1, Ordering::Relaxed);
-                lr = [0, 0];
+            while self.playing && self.position >= 1.0 {
+                let mut lr = [0i16; 2];
+                if self.consumer.pop_slice(&mut lr) < 2 {
+                    // Ran dry. Wait for the buffer to refill before resuming.
+                    self.playing = false;
+                    self.stats.underruns.fetch_add(1, Ordering::Relaxed);
+                    break;
+                }
+                self.from = self.to;
+                self.to = [lr[0] as f32, lr[1] as f32];
+                self.position -= 1.0;
             }
-            let left = lr[0] as f32 / 32768.0 * gain;
-            let right = lr[1] as f32 / 32768.0 * gain;
+            let lr = if self.playing {
+                let t = self.position as f32;
+                self.position += step;
+                [
+                    self.from[0] + (self.to[0] - self.from[0]) * t,
+                    self.from[1] + (self.to[1] - self.from[1]) * t,
+                ]
+            } else {
+                [0.0; 2]
+            };
+            let left = lr[0] / 32768.0 * gain;
+            let right = lr[1] / 32768.0 * gain;
             match frame.len() {
                 1 => frame[0] = T::from_sample((left + right) / 2.0),
                 _ => {
@@ -887,6 +941,53 @@ fn level(audio: &[u8]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Plays 20 s of audio arriving `speed` times as fast as real time, in
+    /// 12.5 ms packets, through 256-frame output buffers. Returns the underruns.
+    fn underruns_at(speed: f64) -> u64 {
+        let (mut producer, consumer) = HeapRb::<i16>::new(48_000).split();
+        let stats = Arc::new(AudioStats::default());
+        let mut player = Playback {
+            consumer,
+            controls: Arc::new(Controls {
+                volume: AtomicU32::new(1.0f32.to_bits()),
+                muted: AtomicBool::new(false),
+                background: AtomicBool::new(false),
+                stop: AtomicBool::new(false),
+            }),
+            stats: stats.clone(),
+            channels: 2,
+            rate: 48_000.0,
+            prefill: frames(48_000, PREFILL) * 2,
+            target: frames(48_000, TARGET_BUFFERED) as f64,
+            max_buffered: frames(48_000, MAX_BUFFERED) * 2,
+            playing: false,
+            level: 0.0,
+            position: 1.0,
+            from: [0.0; 2],
+            to: [0.0; 2],
+        };
+        let packet = vec![1000i16; 600 * 2];
+        let mut out = vec![0f32; 256 * 2];
+        let (mut sent, mut played) = (0.0, 0.0);
+        while played < 20.0 * 48_000.0 {
+            // Packets arrive at the emulator's pace, relative to the output's.
+            while sent <= played * speed {
+                producer.push_slice(&packet);
+                sent += 600.0;
+            }
+            player.fill(&mut out);
+            played += 256.0;
+        }
+        stats.underruns.load(Ordering::Relaxed)
+    }
+
+    #[test]
+    fn follows_an_emulator_that_runs_slow_or_fast() {
+        for speed in [0.99, 0.995, 1.0, 1.01] {
+            assert_eq!(underruns_at(speed), 0, "at {speed} times real time");
+        }
+    }
 
     #[test]
     fn reads_when_android_last_played() {

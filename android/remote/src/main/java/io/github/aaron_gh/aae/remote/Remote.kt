@@ -124,7 +124,7 @@ object Remote {
                 screenHeight = json?.optInt("height") ?: 0
                 attached = id
                 stopSound()
-                val out = SoundOut()
+                val out = SoundOut(app)
                 sound = out
                 connection.sound = { bytes, offset, length -> out.write(bytes, offset, length) }
                 app?.let { AttachedService.start(it, attachedName.ifEmpty { "A device" }, computer?.name ?: "the computer") }

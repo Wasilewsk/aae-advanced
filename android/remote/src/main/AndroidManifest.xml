@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Wi-Fi power saving off while the device's sound plays. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Installing its own updates. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
