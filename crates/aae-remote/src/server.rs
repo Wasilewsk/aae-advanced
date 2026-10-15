@@ -451,7 +451,8 @@ impl Phone {
                     }
                     "device.screen_reader.install" => {
                         // Makes an APK the phone sent the device's screen
-                        // reader, then deletes it. Answers with what happened.
+                        // reader, or queues it for a stopped device, then
+                        // deletes it. Answers with what happened.
                         let upload = params["upload"].as_u64().unwrap_or(0) as u32;
                         let Some((path, _)) = self.uploads.remove(&upload) else {
                             self.out.result(&id, Err("That file wasn't sent.".into()));
@@ -460,12 +461,14 @@ impl Phone {
                         let engine = self.server.engine.clone();
                         let out = self.out.clone();
                         let device = params["id"].as_str().unwrap_or("").to_string();
+                        // A build signed differently replaces the old one, losing its settings.
+                        let replace = params["replace"].as_bool().unwrap_or(false);
                         tokio::spawn(async move {
                             let result = engine
                                 .install_screen_reader_build(
                                     device,
                                     path.to_string_lossy().into_owned(),
-                                    false,
+                                    replace,
                                 )
                                 .await
                                 .map(Value::from);

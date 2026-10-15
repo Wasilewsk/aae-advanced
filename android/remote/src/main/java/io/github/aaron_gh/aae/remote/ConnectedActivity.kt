@@ -1,10 +1,12 @@
 package io.github.aaron_gh.aae.remote
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -104,6 +106,69 @@ abstract class ConnectedActivity : Activity() {
                     sent(number)
                 }
             }.start()
+        }
+    }
+
+    /** Asks for an APK; [onActivityResult] gets it with [request]. */
+    protected fun chooseApk(request: Int) {
+        val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/vnd.android.package-archive")
+        startActivityForResult(pick, request)
+    }
+
+    /** Sends an APK to the computer, which installs it on [device], then asks about its parts. */
+    protected fun installApp(device: String, uri: Uri) {
+        val name = fileName(uri)
+        send(uri, name) { number ->
+            ui.say("Installing $name.")
+            call("tools.install", JSONObject().put("id", device).put("upload", number)) { result ->
+                val json = result as JSONObject
+                ui.say("Installed ${json.optString("package")}.")
+                askParts(device, json.optJSONArray("parts") ?: JSONArray())
+            }
+        }
+    }
+
+    /** Asks which of the app's special parts to turn on, such as an accessibility service. */
+    private fun askParts(device: String, parts: JSONArray) {
+        val list = (0 until parts.length()).map { parts.getJSONObject(it) }.filter { it.isNull("choice") }
+        if (list.isEmpty()) return
+        val on = BooleanArray(list.size) { false }
+        AlertDialog.Builder(this)
+            .setTitle("Turn These On?")
+            .setMultiChoiceItems(list.map { "${it.optString("name")}, ${it.optString("kind")}" }.toTypedArray(), on) { _, which, checked ->
+                on[which] = checked
+            }
+            .setPositiveButton("Done") { _, _ ->
+                val choices = JSONArray()
+                list.forEachIndexed { i, p -> choices.put(JSONObject(p.toString()).put("on", on[i])) }
+                call("tools.app.choices", JSONObject().put("id", device).put("choices", choices)) { ui.say("Done.") }
+            }
+            .show()
+    }
+
+    /**
+     * Sends an APK to the computer, which makes it [device]'s screen reader,
+     * or installs it when the device next starts. A build signed differently
+     * from the one installed replaces it, losing its settings, if confirmed.
+     */
+    protected fun installScreenReader(device: String, deviceName: String, uri: Uri, replace: Boolean = false) {
+        val connection = Remote.connection ?: return ui.say("Not connected to the computer.")
+        val name = fileName(uri, "screen-reader.apk")
+        send(uri, name) { number ->
+            ui.say("Installing $name.")
+            val params = JSONObject().put("id", device).put("upload", number).put("replace", replace)
+            connection.call("device.screen_reader.install", params) { result ->
+                result.onSuccess { ui.say(it.toString()) }.onFailure {
+                    val message = it.message ?: "That didn't work."
+                    if (replace || !message.contains("signed differently")) return@onFailure ui.say(message)
+                    ui.confirm(
+                        "Replace the Screen Reader on $deviceName?",
+                        "This build is signed differently from the one on $deviceName, so it can't be installed over it. Replacing it removes the old one first, and with it the screen reader's settings.",
+                        "Replace",
+                    ) { installScreenReader(device, deviceName, uri, replace = true) }
+                }
+            }
         }
     }
 }

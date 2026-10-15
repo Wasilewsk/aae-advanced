@@ -77,6 +77,10 @@ class DeviceActivity : ConnectedActivity() {
             whileRunning.add(bridgeButton)
         }
         ui.row {
+            running("Install App") { chooseApk(CHOOSE_APP) }
+            ui.button("Install Screen Reader Build") { chooseApk(CHOOSE_SCREEN_READER) }
+        }
+        ui.row {
             ui.button("Hardware") { hardware() }
             ui.button("Rename") { rename() }
             ui.button("Copy") { copy() }
@@ -216,11 +220,7 @@ class DeviceActivity : ConnectedActivity() {
                     ui.say("Downloading Backtalk.")
                     call("device.screen_reader", idParams().put("choice", "backtalk")) { ui.say("$it is installed and on.") }
                 }
-                "Choose Screen Reader APK" -> {
-                    val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                        .setType("application/vnd.android.package-archive")
-                    startActivityForResult(pick, CHOOSE_SCREEN_READER)
-                }
+                "Choose Screen Reader APK" -> chooseApk(CHOOSE_SCREEN_READER)
                 else -> call("device.screen_reader", idParams().put("choice", "none")) {
                     ui.say("$name has no screen reader. AAE won't ask again.")
                 }
@@ -231,12 +231,11 @@ class DeviceActivity : ConnectedActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != CHOOSE_SCREEN_READER || resultCode != RESULT_OK) return
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        val name = fileName(uri, "screen-reader.apk")
-        send(uri, name) { number ->
-            ui.say("Installing $name.")
-            call("device.screen_reader.install", idParams().put("upload", number)) { ui.say(it.toString()) }
+        when (requestCode) {
+            CHOOSE_APP -> installApp(id, uri)
+            CHOOSE_SCREEN_READER -> installScreenReader(id, device?.optString("name") ?: "the device", uri)
         }
     }
 
@@ -332,5 +331,6 @@ class DeviceActivity : ConnectedActivity() {
     companion object {
         private const val MICROPHONE_REQUEST = 1
         private const val CHOOSE_SCREEN_READER = 2
+        private const val CHOOSE_APP = 3
     }
 }
