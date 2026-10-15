@@ -55,12 +55,17 @@ struct NewDeviceView: View {
 
                 // A Googlebook device has one size, a 1920 by 1200 laptop screen.
                 if !isGooglebook {
-                    Picker("Size", selection: $profile) {
-                        ForEach(profiles.indices, id: \.self) { index in
-                            Text(profiles[index].0).tag(index)
+                    // A Wear OS or TV version always makes a watch or a TV.
+                    if let form = chosenForm {
+                        Text("Size: \(form)")
+                    } else {
+                        Picker("Size", selection: $profile) {
+                            ForEach(profiles.indices, id: \.self) { index in
+                                Text(profiles[index].0).tag(index)
+                            }
                         }
+                        .onChange(of: profile) { _ in loadDefaults() }
                     }
-                    .onChange(of: profile) { _ in loadDefaults() }
                     TextField("Memory, in megabytes", text: $memory, prompt: Text(defaults.memory))
                         .accessibilityLabel("Memory, in megabytes")
                         .accessibilityHint("Default \(defaults.memory)")
@@ -112,6 +117,13 @@ struct NewDeviceView: View {
 
     private var isGooglebook: Bool {
         model.versions.indices.contains(versionIndex) && model.versions[versionIndex].tag == "googlebook"
+    }
+
+    /// "Watch" or "TV" for a Wear OS or TV version, which decides the size.
+    private var chosenForm: String? {
+        guard model.versions.indices.contains(versionIndex) else { return nil }
+        let form = model.versions[versionIndex].form
+        return form.isEmpty ? nil : form
     }
 
     private func versionLabel(_ version: VersionInfo) -> String {

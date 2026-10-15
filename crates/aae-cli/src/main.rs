@@ -510,6 +510,15 @@ enum Command {
     Fold { device: String },
     /// Unfold a foldable device, to its wide screen.
     Unfold { device: String },
+    /// Turn a watch's crown. Each step moves TalkBack's focus one item, or scrolls.
+    Crown {
+        device: String,
+        #[arg(value_enum)]
+        direction: CrownDirection,
+        /// How many steps.
+        #[arg(default_value_t = 1)]
+        steps: u32,
+    },
     /// Speech bridge: on, off, or listen (prints utterances, no audio).
     SpeechBridge {
         device: String,
@@ -655,6 +664,12 @@ enum Kind {
     Google,
     /// Android with the Google Play Store.
     Play,
+    /// Wear OS, for a watch.
+    Wear,
+    /// Android TV.
+    Tv,
+    /// Google TV.
+    GoogleTv,
 }
 
 impl Kind {
@@ -664,6 +679,9 @@ impl Kind {
             Kind::Plain => "default",
             Kind::Google => "google_apis",
             Kind::Play => "google_apis_playstore",
+            Kind::Wear => "android-wear",
+            Kind::Tv => "android-tv",
+            Kind::GoogleTv => "google-tv",
         }
     }
 
@@ -672,8 +690,17 @@ impl Kind {
             Kind::Plain => matches!(tag, "default" | "aosp_atd"),
             Kind::Google => matches!(tag, "google_apis" | "google_atd"),
             Kind::Play => tag.contains("playstore"),
+            Kind::Wear | Kind::Tv | Kind::GoogleTv => tag == self.tag(),
         }
     }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum CrownDirection {
+    /// Back an item, or scroll up.
+    Up,
+    /// On to the next item, or scroll down.
+    Down,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -2603,6 +2630,24 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Fold { device } => fold(&ctx, &device, true).await,
         Command::Unfold { device } => fold(&ctx, &device, false).await,
+        Command::Crown {
+            device,
+            direction,
+            steps,
+        } => {
+            let (device, controller, _) = ctx.connect(&device).await?;
+            if device.meta.profile != Profile::Watch {
+                bail!("{} isn't a watch, so it has no crown.", device.meta.name);
+            }
+            let steps = steps.min(100) as i32;
+            controller
+                .turn_crown(match direction {
+                    CrownDirection::Up => steps,
+                    CrownDirection::Down => -steps,
+                })
+                .await?;
+            Ok(())
+        }
         Command::Location {
             device,
             latitude,
@@ -2783,7 +2828,8 @@ fn pick_image(sdk: &Sdk, api: Option<&str>, kind: Option<Kind>) -> Result<sdk::S
             && api.is_none_or(|a| i.release.matches(a))
             // Previews only when asked for by name.
             && (api.is_some() || i.release.preview.is_none())
-            && kind.is_none_or(|k| k.matches(&i.tag))
+            // Wear OS and TV only when asked for with --kind.
+            && kind.map_or(Profile::for_image(&i.tag).is_none(), |k| k.matches(&i.tag))
     };
     if let Some(image) = images.iter().find(fits) {
         return Ok(image.clone());

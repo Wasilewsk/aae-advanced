@@ -37,6 +37,10 @@ pub enum Profile {
     /// Folds in, like a Galaxy Z Fold: a narrow screen folded, a nearly
     /// square one unfolded.
     Foldable,
+    /// A round Wear OS watch, with a rotary crown.
+    Watch,
+    /// An Android TV or Google TV, at 1080p, with a D-pad.
+    Tv,
 }
 
 impl Profile {
@@ -46,6 +50,18 @@ impl Profile {
             Profile::Phone => "Phone",
             Profile::Tablet => "Tablet",
             Profile::Foldable => "Foldable",
+            Profile::Watch => "Watch",
+            Profile::Tv => "TV",
+        }
+    }
+
+    /// The only profile an image can have, for Wear OS and TV images; None
+    /// for phone and tablet images, which take any of the others.
+    pub fn for_image(tag: &str) -> Option<Profile> {
+        match tag {
+            "android-wear" => Some(Profile::Watch),
+            "android-tv" | "google-tv" => Some(Profile::Tv),
+            _ => None,
         }
     }
 
@@ -57,6 +73,9 @@ impl Profile {
             Profile::Tablet => (2560, 1600, 320, 3072),
             // Unfolded; folded, the left half (see FOLDABLE).
             Profile::Foldable => (1768, 2208, 420, 3072),
+            // As Android Studio's Wear OS Large Round and Television (1080p).
+            Profile::Watch => (454, 454, 320, 2048),
+            Profile::Tv => (1920, 1080, 320, 2048),
         }
     }
 }
@@ -365,7 +384,19 @@ impl DeviceStore {
     }
 
     /// Creates a new device from an installed system image.
+    /// Wear OS and TV images make a watch or a TV whatever `profile` says.
     pub fn create(&self, name: &str, image: &SystemImage, profile: Profile) -> Result<Device> {
+        let profile = match Profile::for_image(&image.tag) {
+            Some(only) => only,
+            None if matches!(profile, Profile::Watch | Profile::Tv) => {
+                return Err(Error::Message(format!(
+                    "{} isn't for a {}. Choose a Wear OS or TV version.",
+                    image.release.describe(),
+                    profile.describe().to_lowercase()
+                )));
+            }
+            None => profile,
+        };
         let (id, dir) = self.reserve(name)?;
         std::fs::create_dir_all(&dir).context(|| format!("Creating {}", dir.display()))?;
         let meta = DeviceMeta {
@@ -582,6 +613,8 @@ fn write_config_ini(device: &Device) -> Result<()> {
         "x86_64"
     };
     let play = meta.tag.contains("playstore");
+    let (watch, tv) = (meta.profile == Profile::Watch, meta.profile == Profile::Tv);
+    let yes_no = |on: bool| if on { "yes" } else { "no" }.to_string();
     let entries: Vec<(&str, String)> = vec![
         ("avd.ini.encoding", "UTF-8".into()),
         ("AvdId", device.id.clone()),
@@ -608,7 +641,9 @@ fn write_config_ini(device: &Device) -> Result<()> {
         ("hw.keyboard", "yes".into()),
         ("hw.keyboard.lid", "no".into()),
         ("hw.mainKeys", "no".into()),
-        ("hw.dPad", "no".into()),
+        ("hw.dPad", yes_no(tv)),
+        ("hw.rotaryInput", yes_no(watch)),
+        ("hw.lcd.circular", if watch { "true" } else { "false" }.into()),
         ("hw.audioInput", "yes".into()),
         ("hw.audioOutput", "yes".into()),
         ("hw.gpu.enabled", "yes".into()),
@@ -619,8 +654,11 @@ fn write_config_ini(device: &Device) -> Result<()> {
         ("hw.gps", "yes".into()),
         ("hw.accelerometer", "yes".into()),
         ("hw.sensors.orientation", "yes".into()),
-        ("hw.gsmModem", "yes".into()),
-        ("hw.initialOrientation", "portrait".into()),
+        ("hw.gsmModem", yes_no(!tv)),
+        (
+            "hw.initialOrientation",
+            if tv { "landscape" } else { "portrait" }.into(),
+        ),
         ("showDeviceFrame", "no".into()),
         ("fastboot.forceColdBoot", "no".into()),
         ("fastboot.forceFastBoot", "yes".into()),
@@ -779,6 +817,31 @@ mod tests {
             Some("fyi.quin.backtalk/.Service")
         );
         assert!(reread.meta.speech_bridge);
+        let _ = std::fs::remove_dir_all(&store.root);
+    }
+
+    #[test]
+    fn wear_and_tv_images_make_watches_and_tvs() {
+        let store = temp_store("forms");
+        let mut wear = image();
+        wear.tag = "android-wear".into();
+        let watch = store.create("Watch", &wear, Profile::Phone).unwrap();
+        assert_eq!(watch.meta.profile, Profile::Watch);
+        let config = std::fs::read_to_string(watch.dir.join("config.ini")).unwrap();
+        assert!(config.contains("hw.lcd.circular=true\n"));
+        assert!(config.contains("hw.rotaryInput=yes\n"));
+        assert!(config.contains("hw.lcd.width=454\n"));
+
+        let mut google_tv = image();
+        google_tv.tag = "google-tv".into();
+        let tv = store.create("TV", &google_tv, Profile::Tablet).unwrap();
+        assert_eq!(tv.meta.profile, Profile::Tv);
+        let config = std::fs::read_to_string(tv.dir.join("config.ini")).unwrap();
+        assert!(config.contains("hw.dPad=yes\n"));
+        assert!(config.contains("hw.initialOrientation=landscape\n"));
+
+        // A phone image can't be a watch.
+        assert!(store.create("Not a watch", &image(), Profile::Watch).is_err());
         let _ = std::fs::remove_dir_all(&store.root);
     }
 

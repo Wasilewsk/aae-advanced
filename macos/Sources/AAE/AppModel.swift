@@ -219,7 +219,7 @@ final class AppModel: ObservableObject {
             versions = images.map {
                 VersionInfo(
                     id: $0.sysdir.trimmingCharacters(in: CharacterSet(charactersIn: "/")).replacingOccurrences(of: "/", with: ";"),
-                    api: $0.api, preview: false, tag: "", description: $0.description, installed: true, size: "", sysdir: $0.sysdir
+                    api: $0.api, preview: false, tag: "", description: $0.description, installed: true, size: "", sysdir: $0.sysdir, form: ""
                 )
             }
         }
@@ -1214,6 +1214,10 @@ final class AppModel: ObservableObject {
             queueGesture { [weak self] session in
                 try await self?.sayDetails(session: session)
             }
+        case .crown(let steps):
+            queueGesture { session in
+                try await session.turnCrown(steps: Int32(steps))
+            }
         case .help:
             announce(GestureKeys.helpText)
         case .unknown:
@@ -1361,6 +1365,13 @@ final class AppModel: ObservableObject {
         withSession { [weak self] session in
             let said = try await session.setFolded(folded: folded)
             self?.announce(said)
+        }
+    }
+
+    /// Turns the selected watch's crown: 1 up, -1 down.
+    func turnCrown(_ steps: Int) {
+        withSession { session in
+            try await session.turnCrown(steps: Int32(steps))
         }
     }
 

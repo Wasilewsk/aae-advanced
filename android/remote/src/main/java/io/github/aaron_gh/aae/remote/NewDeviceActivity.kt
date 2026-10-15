@@ -19,6 +19,7 @@ class NewDeviceActivity : ConnectedActivity() {
     private lateinit var versions: ArrayAdapter<String>
     private lateinit var previews: CheckBox
     private lateinit var profile: Spinner
+    private lateinit var profileLabel: android.widget.TextView
     /** Memory, cores and storage: each one's key in requests, label and field. */
     private lateinit var hardware: List<Triple<String, String, EditText>>
     private lateinit var createButton: android.widget.Button
@@ -55,7 +56,7 @@ class NewDeviceActivity : ConnectedActivity() {
             setOnCheckedChangeListener { _, _ -> load() }
             ui.column.addView(this)
         }
-        val profileLabel = ui.text("Kind of device")
+        profileLabel = ui.text("Kind of device")
         profile = Spinner(this).apply {
             id = android.view.View.generateViewId()
             profileLabel.labelFor = id
@@ -106,6 +107,10 @@ class NewDeviceActivity : ConnectedActivity() {
 
     /** Shows AAE's memory, cores and storage for the kind and version chosen, as hints. */
     private fun loadDefaults() {
+        // A Wear OS or TV version always makes a watch or a TV.
+        val form = list.getOrNull(version.selectedItemPosition)?.optString("form").orEmpty()
+        profile.visibility = if (form.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+        profileLabel.text = if (form.isEmpty()) "Kind of device" else "Kind of device: $form"
         if (googlebook()) {
             for ((_, _, field) in hardware) {
                 field.text.clear()

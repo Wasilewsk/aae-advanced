@@ -161,6 +161,15 @@ pub(crate) struct FoldParam {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub(crate) struct CrownParam {
+    /// The device's name. Leave it out when only one device is running.
+    pub device: Option<String>,
+    /// Steps to turn: positive turns it up, moving TalkBack's focus back an
+    /// item for each, or scrolling up; negative turns it down.
+    pub steps: i32,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub(crate) struct FingerprintParam {
     /// The device's name. Leave it out when only one device is running.
     pub device: Option<String>,
@@ -752,6 +761,22 @@ impl AaeServer {
             async {
                 let (_, session) = self.session(p.device.as_deref()).await?;
                 text(session.set_folded(p.folded).await?)
+            }
+            .await,
+        )
+    }
+
+    /// Turns a watch's crown (a Wear OS device's rotary input).
+    #[tool(annotations(destructive_hint = false, idempotent_hint = false))]
+    async fn turn_crown(
+        &self,
+        Parameters(p): Parameters<CrownParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        respond(
+            async {
+                let (_, session) = self.session(p.device.as_deref()).await?;
+                session.turn_crown(p.steps.clamp(-100, 100)).await?;
+                text("Turned.".to_string())
             }
             .await,
         )

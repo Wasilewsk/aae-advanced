@@ -257,6 +257,12 @@ pub async fn start_device(
         other => other?,
     };
 
+    // A watch on its charger shows only the charging screen. The emulator's
+    // battery doesn't run down, so it stays at its level.
+    if device.meta.profile == crate::device::Profile::Watch {
+        controller.unplug_charger().await?;
+    }
+
     // After a cold boot of a device with a screen lock. The helper works, but
     // a speech engine that isn't direct boot aware wouldn't, and failing the
     // speech check would replace it.

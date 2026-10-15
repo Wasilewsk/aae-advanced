@@ -49,6 +49,7 @@ pub fn version(v: &VersionInfo) -> Value {
         "sysdir": v.sysdir,
         "tag": v.tag,
         "preview": v.preview,
+        "form": v.form,
     })
 }
 

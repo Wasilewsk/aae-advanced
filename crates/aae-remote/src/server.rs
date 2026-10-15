@@ -939,6 +939,11 @@ async fn call(
                 .set_folded(params["folded"].as_bool().unwrap_or(true))
                 .await?
         ),
+        "device.crown" => {
+            let steps = params["steps"].as_i64().unwrap_or(1).clamp(-100, 100) as i32;
+            server.session(&id()?).await?.turn_crown(steps).await?;
+            Value::Null
+        }
         "device.rotate" => json!(
             server
                 .session(&id()?)

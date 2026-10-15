@@ -448,6 +448,22 @@ impl Controller {
         Ok(())
     }
 
+    /// Turns a watch's crown by `steps`: positive turns it up, which
+    /// scrolls up, or moves TalkBack's focus back an item. A step is four of
+    /// the emulator's wheel clicks: on Wear OS 6, the least that moves
+    /// TalkBack's focus every time.
+    pub async fn turn_crown(&self, steps: i32) -> Result<()> {
+        let event = pb::WheelEvent {
+            dx: 0,
+            dy: steps * 4 * 120,
+            display: 0,
+        };
+        self.emu("Crown")?
+            .inject_wheel(tokio_stream::iter([event]))
+            .await?;
+        Ok(())
+    }
+
     // Device state.
 
     pub async fn orientation(&self) -> Result<Orientation> {
@@ -533,6 +549,16 @@ impl Controller {
         use pb::battery_state::BatteryCharger;
         let state = self.emu("Battery")?.get_battery(()).await?.into_inner();
         Ok(state.charge_level == 0 && state.charger == BatteryCharger::None as i32)
+    }
+
+    /// Disconnects the charger, keeping the battery's level.
+    pub async fn unplug_charger(&self) -> Result<()> {
+        use pb::battery_state::BatteryCharger;
+        let state = self.emu("Battery")?.get_battery(()).await?.into_inner();
+        if state.charger == BatteryCharger::None as i32 {
+            return Ok(());
+        }
+        self.set_battery(state.charge_level, false).await
     }
 
     /// Sets the battery to 100%, charging, with good health.

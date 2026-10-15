@@ -36,6 +36,8 @@ pub enum GestureAction {
     WhereIsIt,
     /// Read every property of the element at the touch point.
     Details,
+    /// Turn a watch's crown: 1 up, -1 down.
+    Crown(i32),
     Help,
     /// A key that does nothing in gesture mode.
     Unknown,
@@ -43,7 +45,7 @@ pub enum GestureAction {
 
 pub fn help() -> String {
     format!(
-        "Gesture keys. Arrows swipe. Hold one arrow and press another for a two-part swipe, such as up then left. Space double taps. T taps, R triple taps. H double taps and holds, and L touches and holds, until you let go. Hold 2, 3 or 4 while pressing a key to use that many fingers. Gestures happen at the touch point: Tab and Shift Tab move it from item to item, Shift arrows move it a step, C puts it in the middle, W says what's there and where, and D reads its properties. {} returns to Windows.",
+        "Gesture keys. Arrows swipe. Hold one arrow and press another for a two-part swipe, such as up then left. Space double taps. T taps, R triple taps. H double taps and holds, and L touches and holds, until you let go. Hold 2, 3 or 4 while pressing a key to use that many fingers. Gestures happen at the touch point: Tab and Shift Tab move it from item to item, Shift arrows move it a step, C puts it in the middle, W says what's there and where, and D reads its properties. On a watch, left bracket turns the crown up and right bracket turns it down. {} returns to Windows.",
         crate::keyboard::return_shortcut()
     )
 }
@@ -111,6 +113,8 @@ fn other(key: u16) -> Option<GestureAction> {
         0x11 => Some(GestureAction::WhereIsIt), // W
         0x20 => Some(GestureAction::Details),   // D
         0x35 => Some(GestureAction::Help),      // slash, for question mark
+        0x1A => Some(GestureAction::Crown(1)),  // left bracket
+        0x1B => Some(GestureAction::Crown(-1)), // right bracket
         _ => None,
     }
 }

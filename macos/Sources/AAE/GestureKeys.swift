@@ -17,6 +17,8 @@ enum GestureAction: Equatable {
     case whereIsIt
     /// Read every property of the element at the touch point.
     case details
+    /// Turn a watch's crown: 1 up, -1 down.
+    case crown(Int)
     case help
     /// A key that does nothing in gesture mode.
     case unknown
@@ -35,12 +37,13 @@ enum GestureAction: Equatable {
 /// - Tab and Shift-Tab move the touch point to the next or previous thing on
 ///   the screen; Shift-arrows move it a step. C puts it back in the middle,
 ///   W says what's there and where, and D reads its properties.
+/// - On a watch, left and right bracket turn the crown up and down.
 /// - Question mark reads these keys out.
 @MainActor
 final class GestureKeys {
     var act: (GestureAction) -> Void = { _ in }
 
-    static var helpText: String { "Gesture keys. Arrows swipe. Hold one arrow and press another for a two-part swipe, such as up then left. Space double taps. T taps, R triple taps. H double taps and holds, and L touches and holds, until you let go. Hold 2, 3 or 4 while pressing a key to use that many fingers. Gestures happen at the touch point: Tab and Shift Tab move it from item to item, Shift arrows move it a step, C puts it in the middle, W says what's there and where, and D reads its properties. \(ReturnShortcut.current.spoken) returns to the Mac." }
+    static var helpText: String { "Gesture keys. Arrows swipe. Hold one arrow and press another for a two-part swipe, such as up then left. Space double taps. T taps, R triple taps. H double taps and holds, and L touches and holds, until you let go. Hold 2, 3 or 4 while pressing a key to use that many fingers. Gestures happen at the touch point: Tab and Shift Tab move it from item to item, Shift arrows move it a step, C puts it in the middle, W says what's there and where, and D reads its properties. On a watch, left bracket turns the crown up and right bracket turns it down. \(ReturnShortcut.current.spoken) returns to the Mac." }
 
     /// Keys down, as far as gesture mode knows. A key going down again while
     /// in here is the keyboard repeating it.
@@ -73,6 +76,8 @@ final class GestureKeys {
         0x0D: .whereIsIt, // W
         0x02: .details, // D
         0x2C: .help, // slash, for question mark
+        0x21: .crown(1), // left bracket
+        0x1E: .crown(-1), // right bracket
     ]
     private static let tab: UInt16 = 0x30
 

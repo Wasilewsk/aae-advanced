@@ -826,6 +826,8 @@ pub fn command(id: u16, notification: u32) {
         ROTATE_RIGHT => rotate(false),
         FOLD => fold(true),
         UNFOLD => fold(false),
+        CROWN_UP => turn_crown(1),
+        CROWN_DOWN => turn_crown(-1),
         MUTE => toggle_mute(),
         VOLUME_UP => step_volume(true),
         VOLUME_DOWN => step_volume(false),
@@ -1249,7 +1251,7 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         label: "Sto&rage, in megabytes".into(),
         value: String::new(),
     })
-    .text("Empty: AAE's default for the size, Android version and this computer.")
+    .text("Empty: AAE's default for the size, Android version and this computer. Wear OS and TV versions make a watch or a TV, whatever the size.")
     .text(&initial_reader)
     .field(Field::Check {
         label: "&Turn the screen reader's volume up to full".into(),
@@ -2037,6 +2039,9 @@ fn gesture_actions(actions: Vec<GestureAction>) {
             GestureAction::Details => queue_gesture(session.clone(), |s| {
                 Box::pin(async move { say_details(s).await })
             }),
+            GestureAction::Crown(steps) => queue_gesture(session.clone(), move |s| {
+                Box::pin(async move { Ok(s.turn_crown(steps).await?) })
+            }),
             GestureAction::Help => announce(&gestures::help(), Tone::Info),
             GestureAction::Unknown => Tone::Failure.play(),
         }
@@ -2229,6 +2234,14 @@ fn fold(folded: bool) {
     with_session(move |s| async move {
         let said = s.set_folded(folded).await?;
         say(said, Tone::Info);
+        Ok(())
+    });
+}
+
+/// Turns the selected watch's crown: 1 up, -1 down.
+fn turn_crown(steps: i32) {
+    with_session(move |s| async move {
+        s.turn_crown(steps).await?;
         Ok(())
     });
 }

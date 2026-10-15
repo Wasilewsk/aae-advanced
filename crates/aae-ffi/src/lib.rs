@@ -167,6 +167,8 @@ pub struct ImageInfo {
     pub release: String,
     /// Such as "Android 16 (API 36), With Google Play".
     pub description: String,
+    /// "Watch" or "TV" for Wear OS and TV versions; empty for the rest.
+    pub form: String,
 }
 
 /// An installed Android version, with what it costs and who uses it.
@@ -203,6 +205,14 @@ pub struct VersionInfo {
     pub size: String,
     /// Pass this to `create_device` when installed. Empty when not.
     pub sysdir: String,
+    /// "Watch" or "TV" for Wear OS and TV versions, whose devices are always
+    /// that, whatever size is chosen; empty for the rest.
+    pub form: String,
+}
+
+/// What `VersionInfo::form` says for an image's tag.
+fn form(tag: &str) -> String {
+    Profile::for_image(tag).map_or(String::new(), |p| p.describe().to_string())
 }
 
 /// A licence the user has to accept before a download.
@@ -1082,6 +1092,7 @@ impl Engine {
                 api: i.api,
                 release: i.release.id.clone(),
                 description: i.to_string(),
+                form: form(&i.tag),
             })
             .collect()
     }
@@ -1107,10 +1118,16 @@ impl Engine {
                 .map_err(|e| AaeError::Failed {
                     message: e.to_string(),
                 })?;
-            // Sorted like Google's list: newest version first, finished
-            // releases before previews, later updates first.
+            // Phones and tablets, then watches, then TVs, each sorted like
+            // Google's list: newest version first, finished releases before
+            // previews, later updates first.
             let order = |r: &aae_core::sdk::Release, tag: &str| {
                 (
+                    match Profile::for_image(tag) {
+                        None => 0,
+                        Some(Profile::Watch) => 1,
+                        Some(_) => 2,
+                    },
                     std::cmp::Reverse(r.api),
                     r.preview.is_some(),
                     std::cmp::Reverse(r.minor),
@@ -1134,6 +1151,7 @@ impl Engine {
                             installed: true,
                             size: String::new(),
                             sysdir: i.sysdir.clone(),
+                            form: form(&i.tag),
                         },
                     )
                 })
@@ -1154,6 +1172,7 @@ impl Engine {
                             installed: false,
                             size: human_size(image.size),
                             sysdir: String::new(),
+                            form: form(&image.tag),
                         },
                     ));
                 }
@@ -1180,6 +1199,7 @@ impl Engine {
                     } else {
                         String::new()
                     },
+                    form: String::new(),
                 });
             }
             Ok(versions)
@@ -1256,6 +1276,7 @@ impl Engine {
                     api: aae_core::googlebook::API,
                     release: aae_core::googlebook::TAG.to_string(),
                     description: aae_core::googlebook::RELEASE.to_string(),
+                    form: String::new(),
                 })
             })
             .await;
@@ -1293,6 +1314,7 @@ impl Engine {
                 api: installed.api,
                 release: installed.release.id.clone(),
                 description: installed.to_string(),
+                form: form(&installed.tag),
             })
         })
         .await
@@ -1306,7 +1328,9 @@ impl Engine {
     /// The memory, cores and storage a new device of this size and Android
     /// version gets unless chosen. `tag` is the version's, as VersionInfo has it.
     pub fn default_hardware(&self, profile: DeviceProfile, tag: String) -> HardwareChoice {
-        aae_core::hardware::defaults(profile.into(), tag.contains("playstore")).into()
+        // Wear OS and TV images make a watch or a TV whatever the size chosen.
+        let profile = Profile::for_image(&tag).unwrap_or(profile.into());
+        aae_core::hardware::defaults(profile, tag.contains("playstore")).into()
     }
 
     /// Checks the hardware chosen for a new device is within AAE's limits,
@@ -1973,10 +1997,13 @@ impl Session {
         let (tx, mut rx) = mpsc::unbounded_channel::<KeyMessage>();
         let sender = controller.clone();
         let layouts = adb.clone();
+        // A TV is used with its remote's Back button, which Escape stands for.
+        let tv = device_meta.profile == Profile::Tv;
         runtime().spawn(async move {
             while let Some(message) = rx.recv().await {
                 match message {
                     KeyMessage::Evdev(code, down) => {
+                        let code = if tv && code == keys::ESCAPE { keys::BACK } else { code };
                         if let Err(e) = sender.evdev_key(code, down).await {
                             tracing::warn!("a key could not be sent: {e}");
                         }
@@ -2227,6 +2254,23 @@ impl Session {
         let layout = self.typing.lock().unwrap().layout;
         on_runtime(async move { Ok(provision::reselect_keyboard_layout(&adb, layout).await?) })
             .await
+    }
+
+    /// Whether the device is a watch, with a crown to turn.
+    pub fn is_watch(&self) -> bool {
+        self.device.lock().unwrap().meta.profile == Profile::Watch
+    }
+
+    /// Turns a watch's crown by `steps`: positive turns it up, moving the
+    /// screen reader's focus back an item for each, or scrolling up.
+    pub async fn turn_crown(&self, steps: i32) -> Result<(), AaeError> {
+        if !self.is_watch() {
+            return Err(AaeError::Failed {
+                message: format!("{} isn't a watch, so it has no crown.", self.device_name()),
+            });
+        }
+        let controller = self.controller.clone();
+        on_runtime(async move { Ok(controller.turn_crown(steps).await?) }).await
     }
 
     /// Presses a key by name, such as "back", "home" or "meta+right".

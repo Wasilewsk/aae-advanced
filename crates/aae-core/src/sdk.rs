@@ -248,6 +248,9 @@ pub fn image_kind(tag: &str) -> &'static str {
     match tag {
         "default" | "aosp_atd" => "Plain Android",
         crate::googlebook::TAG => "Googlebook OS",
+        "android-wear" => "Wear OS",
+        "android-tv" => "Android TV",
+        "google-tv" => "Google TV",
         "google_apis" | "google_atd" => "With Google services",
         t if t.contains("playstore") => "With Google Play",
         // Such as google_apis_ps16k, with 16 KB memory pages.

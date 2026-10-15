@@ -41,6 +41,7 @@ Below these, Android starts but is too slow to use with a screen reader. Setup a
 ### Devices
 
 - Create, copy, rename, wipe and delete. Sizes: small phone, phone, tablet, and foldable (folds in, 337 dp wide folded and 674 dp unfolded). Wipe resets to first setup and keeps name, hardware and volume.
+- Watches and TVs: a Wear OS version makes a round watch (454 by 454) with a crown; an Android TV or Google TV version makes a 1080p TV with a D-pad. Both use the image's TalkBack. A watch starts off its charger, which would otherwise show only the charging screen. On a TV, the arrow keys are the D-pad, Return selects, and Escape is Back. Google TV images stay on their "Set up Google TV" screen until a Google account is signed in; Android TV images need no account. `aae download --api 36 --kind wear` (or `tv`, `google-tv`); `aae create` picks Wear OS and TV versions only with `--kind`.
 - Hardware (stopped devices): memory, cores, storage, screen size and density, from next start. `aae hardware <device> memory 4096 cores 6 storage 16G screen 1440x3120 density 560`; `cores auto` reverts to AAE's choice. Less storage needs a wipe, and so does more storage on Android versions with encrypted storage, such as Android 16; AAE's message says which. `aae create` and New Device take memory, cores and storage too. New devices get 6 GB of storage, or 16 GB with Google Play.
 - Export and Import: one `.aaedevice` file with apps, data, settings and named snapshots, between computers with the same processor architecture. The Android version must be installed on the target. `aae export`, `aae import`.
 - No emulator window.
@@ -96,6 +97,7 @@ Mac with Apple silicon only.
   - Space double tap, T tap, R triple tap, H double tap and hold, L touch and hold.
   - Hold 2, 3 or 4 for that many fingers.
   - Touch point: Tab and Shift-Tab move between screen elements, Shift-arrows move in steps, C centres, W says what's there and its position in percent and pixels, D reads every property of the element there. Works without a screen reader running.
+  - On a watch, left bracket turns the crown up and right bracket turns it down. Each step moves TalkBack's focus one item, or scrolls.
   - Question mark lists the keys.
 - `aae gesture <device> swipe-right double-tap`; `--at X,Y`. `aae inspect <device> --targets` lists touch targets; `--at X,Y` prints the element at a point.
 
@@ -105,6 +107,7 @@ Mac with Apple silicon only.
 - Fingerprint touches, fingers 1 to 10. Enroll them in Android's security settings.
 - Shake.
 - Fold and unfold a foldable device.
+- Turn a watch's crown: Turn Crown Up and Turn Crown Down in the Device menu, `aae crown <device> up|down [steps]`.
 - Location from coordinates, a place or an address (looked up on OpenStreetMap; only the typed text is sent).
 - Play GPX Route: moves the location once a second along the file's track, route or waypoints, at the file's pace or 30 km/h, with a speed multiplier. Choose again to stop.
 - Text messages to the device; incoming calls, and answer, busy or hang up for outgoing calls.
@@ -164,7 +167,7 @@ Android app (`android/remote`; server `crates/aae-remote`) for the devices on a 
 - **At login:** Serve at login, without AAE open (in Serve Devices to Phones) or `aae daemon install|uninstall|status`: a LaunchAgent, a Windows Run entry or a systemd user service. `aae pair` makes a pairing code for it. Logs to `serve.log`.
 - **Pairing:** Pair with a Computer: choose a computer on the network or type an address, then enter its 12-character code (single use, 10 minutes). TLS with the certificate pinned. `aae phones`, `aae phones --unpair <id>`.
 - **Managing:** devices (create, start, stop, restart, wipe, copy, rename, delete), Android versions (download after accepting the licence on the phone, delete), tool setup and updates.
-- **Device screen:** Android buttons, Speak Status, rotation, Fold and Unfold, Restart, Cold Boot. Testing Tools: speech log, device log, inspector, apps, services, snapshots, Battery, Location, Phone and Network (including GPX upload), Display and Language, links and intents, clipboard, APK install.
+- **Device screen:** Android buttons, Speak Status, rotation, Fold and Unfold, Turn Crown Up and Down (watches), Restart, Cold Boot, Install App, Install Screen Reader Build. Testing Tools: speech log, device log, inspector, apps, services, snapshots, Battery, Location, Phone and Network (including GPX upload), Display and Language, links and intents, clipboard, APK install.
 - **Microphone:** sends the phone's microphone while an app on the device records (voice communication source, echo cancelled). Foreground only. Testing Tools uploads an audio file to play into it.
 - **Speech bridge:** sends the device's speech to the phone's text-to-speech. Engine and rate: Bridge Text-to-Speech Settings (default: system). Takes priority over a desktop app while the phone is attached.
 - **Tablets and unfolded phones:** on a window at least 600 dp wide, a screen opens beside the one it was opened from, such as a device's controls beside the device list. Gesture and keyboard mode take the whole window. Android 12L or later.
@@ -191,7 +194,7 @@ aae stop "Android 16 test"
 - Keyboard, audio and speech: `attach`, `keyboard`, `listen`, `playback-volume`, `audio-output`, `volume`, `key`, `type`, `gesture`, `keytest`, `latency`, `sound-check`, `audio-check`, `mic`, `speech`, `speech-bridge`.
 - Screen readers and apps: `screen-reader`, `services`, `install`, `apps`, `app`, `watch`, `link`, `intent`.
 - Testing: `inspect`, `check`, `speech-log`, `logs`, `shell`, `screenshot`, `record`.
-- Conditions: `rotate`, `battery`, `fingerprint`, `shake`, `fold`, `unfold`, `location`, `route`, `network`, `settings`, `sms`, `call`, `clipboard`.
+- Conditions: `rotate`, `battery`, `fingerprint`, `shake`, `fold`, `unfold`, `crown`, `location`, `route`, `network`, `settings`, `sms`, `call`, `clipboard`.
 - AAE Remote: `serve`, `pair`, `phones`, `daemon`.
 - AI agents: `mcp`.
 

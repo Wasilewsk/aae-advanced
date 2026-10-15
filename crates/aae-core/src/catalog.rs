@@ -24,8 +24,16 @@ use crate::sdk::{
 };
 
 const REPOSITORY: &str = "https://dl.google.com/android/repository/sys-img";
-/// The image types AAE offers: plain Android, with Google services, and with Google Play.
-const TAGS: &[&str] = &["default", "google_apis", "google_apis_playstore"];
+/// The image types AAE offers: plain Android, with Google services, with
+/// Google Play, Wear OS, Android TV and Google TV.
+const TAGS: &[&str] = &[
+    "default",
+    "google_apis",
+    "google_apis_playstore",
+    "android-wear",
+    "android-tv",
+    "google-tv",
+];
 /// The catalogue file's folder for each tag, when it differs from the tag.
 fn catalogue_folder(tag: &str) -> &str {
     if tag == "default" { "android" } else { tag }

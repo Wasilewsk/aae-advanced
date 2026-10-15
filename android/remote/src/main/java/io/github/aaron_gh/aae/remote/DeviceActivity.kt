@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import org.json.JSONArray
@@ -23,6 +24,8 @@ class DeviceActivity : ConnectedActivity() {
     private lateinit var microphoneButton: Button
     private lateinit var bridgeButton: Button
     private val whileRunning = mutableListOf<Button>()
+    /** Shown only for a watch. */
+    private val crown = mutableListOf<Button>()
     /** Starting, stopping, restarting or wiping: those buttons wait till it's done. */
     private var busy = false
 
@@ -33,7 +36,7 @@ class DeviceActivity : ConnectedActivity() {
         title = ui.heading("Device")
         about = ui.text("")
         ui.addStatus()
-        fun running(text: String, action: () -> Unit) = whileRunning.add(ui.button(text, action))
+        fun running(text: String, action: () -> Unit): Button = ui.button(text, action).also { whileRunning.add(it) }
         ui.row {
             startStop = ui.button("Start") { startOrStop() }
             running("Restart") {
@@ -69,6 +72,11 @@ class DeviceActivity : ConnectedActivity() {
             running("Rotate Right") { call("device.rotate", idParams().put("left", false)) { ui.say(it.toString()) } }
             running("Fold") { call("device.fold", idParams().put("folded", true)) { ui.say(it.toString()) } }
             running("Unfold") { call("device.fold", idParams().put("folded", false)) { ui.say(it.toString()) } }
+        }
+        ui.row {
+            crown += running("Turn Crown Up") { call("device.crown", idParams().put("steps", 1)) }
+            crown += running("Turn Crown Down") { call("device.crown", idParams().put("steps", -1)) }
+            crown.forEach { it.visibility = View.GONE }
         }
         ui.row {
             microphoneButton = ui.button("Turn On Microphone") { toggleMicrophone() }
@@ -164,6 +172,8 @@ class DeviceActivity : ConnectedActivity() {
             startStop.text = if (running) "Stop" else "Start"
             startStop.isEnabled = !busy
             whileRunning.forEach { it.isEnabled = running && !busy }
+            val watch = d.optString("profile") == "Watch"
+            crown.forEach { it.visibility = if (watch) View.VISIBLE else View.GONE }
             bridgeButton.text = if (d.optBoolean("speech_bridge")) "Turn Off Speech Bridge" else "Turn On Speech Bridge"
             if (running) attach()
             then()

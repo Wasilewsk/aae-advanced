@@ -386,6 +386,10 @@ pub fn is_modifier(code: i32) -> bool {
 /// Android buttons with no key of their own that the emulator takes, which
 /// go through Android's input command instead: their names, and Android's
 /// key code.
+/// The Linux key codes for Escape and Android's Back button.
+pub const ESCAPE: i32 = 1;
+pub const BACK: i32 = 158;
+
 const ANDROID_ONLY: &[(&str, &str)] = &[
     ("assistant", "KEYCODE_ASSIST"),
     ("assist", "KEYCODE_ASSIST"),

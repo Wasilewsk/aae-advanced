@@ -33,6 +33,8 @@ pub const ROTATE_LEFT: u16 = 220;
 pub const ROTATE_RIGHT: u16 = 221;
 pub const FOLD: u16 = 208;
 pub const UNFOLD: u16 = 209;
+pub const CROWN_UP: u16 = 234;
+pub const CROWN_DOWN: u16 = 235;
 pub const MUTE: u16 = 222;
 pub const VOLUME_UP: u16 = 223;
 pub const VOLUME_DOWN: u16 = 224;
@@ -142,6 +144,8 @@ fn menus() -> Vec<(&'static str, Vec<Item>)> {
                 Item(ROTATE_RIGHT, "Rotate Ri&ght", Some((cs, VK_RIGHT.0))),
                 Item(FOLD, "F&old", None),
                 Item(UNFOLD, "U&nfold", None),
+                Item(CROWN_UP, "Turn Crown &Up", None),
+                Item(CROWN_DOWN, "Turn Crown Do&wn", None),
                 Item(MUTE, "&Mute Device Audio", Some((cs, b'M' as u16))),
                 Item(VOLUME_UP, "Turn Device Audio &Up", Some((ca, VK_UP.0))),
                 Item(

@@ -39,7 +39,8 @@ pub(crate) struct CreateParam {
     /// 37.2-beta3. Downloading a version needs its licence accepted by the
     /// user, so it's done in AAE's app, not here.
     pub version: String,
-    /// "small-phone", "phone" (the default), "tablet" or "foldable".
+    /// "small-phone", "phone" (the default), "tablet" or "foldable". A Wear
+    /// OS or TV version makes a watch or a TV whatever this says.
     pub size: Option<String>,
     /// Memory in megabytes. Defaults to 2048, or 3072 for a tablet or foldable.
     pub memory_mb: Option<u32>,
@@ -327,12 +328,18 @@ impl AaeServer {
                     .iter()
                     .find(|i| i.description.to_lowercase() == wanted)
                     .or_else(|| {
-                        images.iter().find(|i| {
+                        let release = |i: &&aae_ffi::ImageInfo| {
                             i.release.eq_ignore_ascii_case(&wanted)
                                 || aae_core::sdk::parse_api_level(&wanted)
                                     .zip(aae_core::sdk::parse_api_level(&i.release))
                                     .is_some_and(|(a, b)| a == b)
-                        })
+                        };
+                        // A phone version before a Wear OS or TV one of the same level.
+                        images
+                            .iter()
+                            .filter(|i| i.form.is_empty())
+                            .find(release)
+                            .or_else(|| images.iter().find(release))
                     })
                     .or_else(|| images.iter().find(|i| i.description.to_lowercase().contains(&wanted)))
                     .ok_or_else(|| {
