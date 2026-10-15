@@ -449,6 +449,30 @@ impl Phone {
                             out.result(&id, result.map_err(|e| e.to_string()));
                         });
                     }
+                    "device.screen_reader.install" => {
+                        // Makes an APK the phone sent the device's screen
+                        // reader, then deletes it. Answers with what happened.
+                        let upload = params["upload"].as_u64().unwrap_or(0) as u32;
+                        let Some((path, _)) = self.uploads.remove(&upload) else {
+                            self.out.result(&id, Err("That file wasn't sent.".into()));
+                            return true;
+                        };
+                        let engine = self.server.engine.clone();
+                        let out = self.out.clone();
+                        let device = params["id"].as_str().unwrap_or("").to_string();
+                        tokio::spawn(async move {
+                            let result = engine
+                                .install_screen_reader_build(
+                                    device,
+                                    path.to_string_lossy().into_owned(),
+                                    false,
+                                )
+                                .await
+                                .map(Value::from);
+                            let _ = std::fs::remove_file(&path);
+                            out.result(&id, result.map_err(|e| e.to_string()));
+                        });
+                    }
                     "tools.install" => {
                         // Installs a file the phone sent, then deletes it.
                         let upload = params["upload"].as_u64().unwrap_or(0) as u32;

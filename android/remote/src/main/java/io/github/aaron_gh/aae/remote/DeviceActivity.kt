@@ -201,18 +201,42 @@ class DeviceActivity : ConnectedActivity() {
         }
     }
 
-    /** A device whose Android has no screen reader. */
+    /** A device whose Android has no screen reader. Backtalk needs Android 8 or later. */
     private fun askScreenReader() {
         val name = device?.optString("name") ?: "The device"
-        ui.choose("$name Has No Screen Reader", listOf("Install Backtalk", "Go without one")) { which ->
-            if (which == 0) {
-                ui.say("Downloading Backtalk.")
-                call("device.screen_reader", idParams().put("choice", "backtalk")) { ui.say("$it is installed and on.") }
-            } else {
-                call("device.screen_reader", idParams().put("choice", "none")) {
+        val backtalk = device?.optBoolean("backtalk_supported", true) != false
+        val choices = listOfNotNull(
+            "Install Backtalk".takeIf { backtalk },
+            "Choose Screen Reader APK",
+            "Go without one",
+        )
+        ui.choose("$name Has No Screen Reader", choices) { which ->
+            when (choices[which]) {
+                "Install Backtalk" -> {
+                    ui.say("Downloading Backtalk.")
+                    call("device.screen_reader", idParams().put("choice", "backtalk")) { ui.say("$it is installed and on.") }
+                }
+                "Choose Screen Reader APK" -> {
+                    val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("application/vnd.android.package-archive")
+                    startActivityForResult(pick, CHOOSE_SCREEN_READER)
+                }
+                else -> call("device.screen_reader", idParams().put("choice", "none")) {
                     ui.say("$name has no screen reader. AAE won't ask again.")
                 }
             }
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != CHOOSE_SCREEN_READER || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val name = fileName(uri, "screen-reader.apk")
+        send(uri, name) { number ->
+            ui.say("Installing $name.")
+            call("device.screen_reader.install", idParams().put("upload", number)) { ui.say(it.toString()) }
         }
     }
 
@@ -307,5 +331,6 @@ class DeviceActivity : ConnectedActivity() {
 
     companion object {
         private const val MICROPHONE_REQUEST = 1
+        private const val CHOOSE_SCREEN_READER = 2
     }
 }
