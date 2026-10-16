@@ -537,12 +537,13 @@ enum Command {
     },
     /// Show or change a stopped device's hardware, from its next start.
     ///
-    /// Example: aae hardware Pixel memory 4096 cores 6 storage 16G screen 1440x3120 density 560
+    /// Example: aae hardware Pixel memory 4096 cores 6 storage 16G screen 1440x3120 density 560 graphics software
     Hardware {
         device: String,
         /// Pairs of setting and value: memory (megabytes), cores (or auto,
         /// to suit this computer), storage (such as 16G or 8192M), screen
-        /// (width x height), density.
+        /// (width x height), density, graphics (adapter, or software, which
+        /// is slower but keeps WebViews working on some Macs).
         changes: Vec<String>,
     },
     /// Play a GPX route as the device's location until it ends or Control-C.
@@ -2480,14 +2481,19 @@ async fn run(cli: Cli) -> Result<()> {
             let mut hw = hardware::read(&device)?;
             if changes.is_empty() {
                 println!(
-                    "{}: {} megabytes of memory, {} processor cores, {} megabytes of storage, a {} by {} screen at {} dots per inch.",
+                    "{}: {} megabytes of memory, {} processor cores, {} megabytes of storage, a {} by {} screen at {} dots per inch, {}.",
                     device.meta.name,
                     hw.memory_mb,
                     hw.cores,
                     hw.storage_mb,
                     hw.width,
                     hw.height,
-                    hw.density
+                    hw.density,
+                    if hw.software_graphics {
+                        "software graphics"
+                    } else {
+                        "graphics adapter"
+                    }
                 );
                 return Ok(());
             }
@@ -2526,8 +2532,15 @@ async fn run(cli: Cli) -> Result<()> {
                         hw.height = h;
                     }
                     "density" | "dpi" => hw.density = number()?,
+                    "graphics" | "gpu" => {
+                        hw.software_graphics = match value.to_lowercase().as_str() {
+                            "software" => true,
+                            "adapter" | "host" | "hardware" => false,
+                            _ => bail!("graphics is adapter or software, not {value}."),
+                        }
+                    }
                     other => bail!(
-                        "\"{other}\" isn't hardware AAE changes. Use memory, cores, storage, screen or density."
+                        "\"{other}\" isn't hardware AAE changes. Use memory, cores, storage, screen, density or graphics."
                     ),
                 }
             }

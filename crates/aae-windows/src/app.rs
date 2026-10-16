@@ -2411,6 +2411,12 @@ fn edit_hardware() {
             .field(field("Screen &width, in pixels", hardware.width))
             .field(field("Screen &height, in pixels", hardware.height))
             .field(field("Screen &density, in dots per inch", hardware.density))
+            .field(Field::Choice {
+                label: "&Graphics".into(),
+                items: vec!["Graphics adapter".into(), "Software".into()],
+                selected: usize::from(hardware.software_graphics),
+            })
+            .text("Software graphics is slower. Use it if WebViews, such as Google sign-in, crash.")
             .text("Applies at next start. Some storage changes need a wipe.")
             .button("Save", 1, Role::Default)
             .button("Cancel", 0, Role::Cancel),
@@ -2432,6 +2438,7 @@ fn edit_hardware() {
         width: n[3],
         height: n[4],
         density: n[5],
+        software_graphics: answer.values[6].choice() == Some(1),
     };
     match engine.set_device_hardware(device.id, chosen) {
         Ok(said) => announce(&said, Tone::Success),

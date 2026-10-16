@@ -1,6 +1,7 @@
-//! A device's advanced hardware: memory, processor cores, storage, and the
-//! screen's size and density, kept in the emulator's `config.ini`. Changed
-//! only while the device is stopped; it takes effect when it next starts.
+//! A device's advanced hardware: memory, processor cores, storage, the
+//! screen's size and density, kept in the emulator's `config.ini`, and
+//! graphics, kept in AAE's record. Changed only while the device is stopped;
+//! it takes effect when it next starts.
 
 use crate::device::Device;
 use crate::error::{Error, Result};
@@ -19,6 +20,10 @@ pub struct Hardware {
     pub height: u32,
     /// Pixels per inch, which sets how big things are drawn.
     pub density: u32,
+    /// Draw the screen in software instead of with the computer's graphics
+    /// adapter. Slower, but WebViews, such as Google's sign-in, crash on
+    /// Android 16 and later with the graphics adapter on some Macs.
+    pub software_graphics: bool,
 }
 
 /// A new device's storage, in megabytes: 6 GB, or with Google Play, which
@@ -82,6 +87,7 @@ pub fn read(device: &Device) -> Result<Hardware> {
         width: number("hw.lcd.width", 1080),
         height: number("hw.lcd.height", 2400),
         density: number("hw.lcd.density", 420),
+        software_graphics: device.meta.software_graphics,
     })
 }
 
@@ -138,6 +144,7 @@ pub fn check_choice(choice: &Choice) -> Result<()> {
         width: SIDE.0,
         height: SIDE.0,
         density: DENSITY.0,
+        software_graphics: false,
     })
 }
 
@@ -187,19 +194,37 @@ pub fn write(device: &mut Device, hardware: &Hardware) -> Result<String> {
     save(device, hardware)?;
     // AAE starts devices with as many cores as suit the computer, unless
     // they were chosen.
-    if hardware.cores != before.cores || device.meta.cores.is_some() {
-        device.meta.cores = Some(hardware.cores);
-        device.save_meta()?;
+    let cores = (hardware.cores != before.cores || device.meta.cores.is_some())
+        .then_some(hardware.cores);
+    let software = hardware.software_graphics;
+    if software != before.software_graphics {
+        // The quick-boot snapshot holds the other graphics' state.
+        let quick_boot = device.dir.join("snapshots").join("default_boot");
+        if quick_boot.exists() {
+            std::fs::remove_dir_all(&quick_boot)
+                .map_err(|e| Error::Message(format!("{} can't be deleted: {e}", quick_boot.display())))?;
+        }
     }
+    device.update_meta(|meta| {
+        if cores.is_some() {
+            meta.cores = cores;
+        }
+        meta.software_graphics = software;
+    })?;
     let mut said = format!(
-        "{}: {} MB memory, {} cores, {} MB storage, {}x{} at {} dpi, from next start.",
+        "{}: {} MB memory, {} cores, {} MB storage, {}x{} at {} dpi, {}, from next start.",
         device.meta.name,
         hardware.memory_mb,
         hardware.cores,
         hardware.storage_mb,
         hardware.width,
         hardware.height,
-        hardware.density
+        hardware.density,
+        if software {
+            "software graphics"
+        } else {
+            "graphics adapter"
+        }
     );
     if storage_needs_wipe(&device.dir, before.storage_mb, hardware.storage_mb) {
         said.push_str(" The storage change takes effect after a wipe.");
@@ -261,6 +286,7 @@ mod tests {
             width: 1080,
             height: 2400,
             density: 420,
+            software_graphics: false,
         };
         assert!(check(&good).is_ok());
         assert!(

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A stopped device's advanced hardware: memory, processor cores, storage,
-/// and the screen's size and density, from its next start.
+/// the screen's size and density, and graphics, from its next start.
 struct HardwareView: View {
     @EnvironmentObject var model: AppModel
     let device: DeviceInfo
@@ -11,6 +11,7 @@ struct HardwareView: View {
     @State private var width = ""
     @State private var height = ""
     @State private var density = ""
+    @State private var softwareGraphics = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -23,7 +24,14 @@ struct HardwareView: View {
                 TextField("Screen width, in pixels", text: $width)
                 TextField("Screen height, in pixels", text: $height)
                 TextField("Screen density, in dots per inch", text: $density)
+                Picker("Graphics", selection: $softwareGraphics) {
+                    Text("Graphics adapter").tag(false)
+                    Text("Software").tag(true)
+                }
             }
+            Text("Software graphics is slower. Use it if WebViews, such as Google sign-in, crash.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
             Text("Applies at next start. Some storage changes need a wipe.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -48,6 +56,7 @@ struct HardwareView: View {
         width = String(hardware.width)
         height = String(hardware.height)
         density = String(hardware.density)
+        softwareGraphics = hardware.softwareGraphics
     }
 
     private func save() {
@@ -59,7 +68,7 @@ struct HardwareView: View {
             return
         }
         let n = numbers.map { $0! }
-        let hardware = HardwareInfo(memoryMb: n[0], cores: n[1], storageMb: n[2], width: n[3], height: n[4], density: n[5])
+        let hardware = HardwareInfo(memoryMb: n[0], cores: n[1], storageMb: n[2], width: n[3], height: n[4], density: n[5], softwareGraphics: softwareGraphics)
         if model.setHardware(of: device, to: hardware) {
             dismiss()
         }

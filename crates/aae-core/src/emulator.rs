@@ -96,8 +96,9 @@ pub fn start(
         .stderr(log_err);
     // Without a window the emulator picks software graphics by itself, which
     // makes Android slow even on a fast computer, so AAE asks for the
-    // graphics adapter, unless it failed for this device before (see
-    // lifecycle::start_device). AAE_GPU sets another mode, for troubleshooting.
+    // graphics adapter, unless the device's hardware chooses software or the
+    // adapter failed for it before (see lifecycle::start_device). AAE_GPU
+    // sets another mode, for troubleshooting.
     match std::env::var("AAE_GPU").ok().filter(|g| !g.is_empty()) {
         Some(mode) => {
             command.arg("-gpu").arg(mode);
@@ -105,7 +106,9 @@ pub fn start(
         None if !device.meta.software_graphics => {
             command.arg("-gpu").arg("host");
         }
-        None => {}
+        None => {
+            command.arg("-gpu").arg("swiftshader_indirect");
+        }
     }
     if options.cold_boot {
         command.arg("-no-snapshot-load");

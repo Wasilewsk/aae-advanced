@@ -193,8 +193,9 @@ pub struct DeviceMeta {
     /// English (US) otherwise (see [`crate::keyboard_layouts`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_layout: Option<String>,
-    /// The emulator couldn't use the computer's graphics adapter for this
-    /// device, so it draws the screen in software, which is slower.
+    /// The device draws its screen in software, which is slower: chosen in
+    /// its hardware, or because the emulator couldn't use the computer's
+    /// graphics adapter for it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub software_graphics: bool,
     /// Accessibility services AAE turns back on after every boot and install,

@@ -278,6 +278,15 @@ class DeviceActivity : ConnectedActivity() {
                     column.addView(this)
                 }
             }
+            // An older AAE on the computer has no graphics setting.
+            val software = if (!now.has("software_graphics")) null else android.widget.CheckBox(this).apply {
+                text = "Software graphics"
+                isChecked = now.optBoolean("software_graphics")
+                column.addView(this)
+                column.addView(android.widget.TextView(this@DeviceActivity).apply {
+                    text = "Slower. Use it if WebViews, such as Google sign-in, crash."
+                })
+            }
             android.app.AlertDialog.Builder(this)
                 .setTitle("Hardware of ${d.optString("name")}")
                 .setView(android.widget.ScrollView(this).apply { addView(column) })
@@ -287,6 +296,7 @@ class DeviceActivity : ConnectedActivity() {
                         val n = edits[i].text.toString().trim().toLongOrNull() ?: return@setPositiveButton ui.say("Each one takes a whole number.")
                         params.put(field.first, n)
                     }
+                    software?.let { params.put("software_graphics", it.isChecked) }
                     call("device.hardware.set", params) { ui.say(it.toString()) }
                 }
                 .setNegativeButton(android.R.string.cancel, null)

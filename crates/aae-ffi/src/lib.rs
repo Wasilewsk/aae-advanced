@@ -610,6 +610,8 @@ pub struct HardwareInfo {
     pub width: u32,
     pub height: u32,
     pub density: u32,
+    /// Software graphics instead of the computer's graphics adapter.
+    pub software_graphics: bool,
 }
 
 /// Memory, cores and storage for a new device. None keeps AAE's default.
@@ -649,6 +651,7 @@ impl From<aae_core::hardware::Hardware> for HardwareInfo {
             width: h.width,
             height: h.height,
             density: h.density,
+            software_graphics: h.software_graphics,
         }
     }
 }
@@ -1663,6 +1666,7 @@ impl Engine {
                 width: hardware.width,
                 height: hardware.height,
                 density: hardware.density,
+                software_graphics: hardware.software_graphics,
             },
         )?)
     }

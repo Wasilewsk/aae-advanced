@@ -806,6 +806,7 @@ async fn call(
             json!({
                 "memory_mb": h.memory_mb, "cores": h.cores, "storage_mb": h.storage_mb,
                 "width": h.width, "height": h.height, "density": h.density,
+                "software_graphics": h.software_graphics,
             })
         }
         "device.hardware.set" => {
@@ -826,6 +827,11 @@ async fn call(
                     width: number("width")?,
                     height: number("height")?,
                     density: number("density")?,
+                    // An older AAE Remote doesn't send it: it stays as it is.
+                    software_graphics: match params["software_graphics"].as_bool() {
+                        Some(software) => software,
+                        None => engine.device_hardware(id()?)?.software_graphics,
+                    },
                 },
             )?)
         }
