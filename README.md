@@ -8,12 +8,12 @@ AAE Advanced is a renamed continuation of the [Accessible Android Emulator](http
 
 ## Getting AAE
 
-AAE Advanced has no builds of its own yet. The installers below are the original project's, and install the same app; [Building](#building) makes AAE Advanced from this source.
+AAE Advanced has no stable release of its own yet. The installers below are the original project's, and install the same app; AAE Advanced's own development builds come from this repository, and [Building](#building) makes it from source.
 
 - **Mac:** the disk image from the [latest release](https://github.com/aaron-gh/accessible-android-emulator/releases/latest). Apple silicon, macOS 13 or later. Not notarised: on first open, System Settings, Privacy & Security, Open Anyway.
 - **Windows:** `AAE-<version>-windows-x64-setup.exe` from the latest release. Installs per user, no administrator prompt. Windows 10 or 11, 64-bit, Intel or AMD, with Windows Hypervisor Platform on. No Windows on ARM (Google's emulator doesn't support it). Not signed: SmartScreen, More info, Run anyway.
 - **Android phones:** `AAE-Remote-<version>.apk`. See [AAE Remote](#aae-remote).
-- **Development builds:** every change to `master`, in the [dev prerelease](https://github.com/aaron-gh/accessible-android-emulator/releases/tag/dev): [AAE-dev.dmg](https://github.com/aaron-gh/accessible-android-emulator/releases/download/dev/AAE-dev.dmg), [AAE-dev-windows-x64-setup.exe](https://github.com/aaron-gh/accessible-android-emulator/releases/download/dev/AAE-dev-windows-x64-setup.exe). Help, About AAE shows the build.
+- **Development builds:** every change to `master`, in the [dev prerelease](https://github.com/Wasilewsk/aae-advanced/releases/tag/dev): [AAE-dev.dmg](https://github.com/Wasilewsk/aae-advanced/releases/download/dev/AAE-dev.dmg), [AAE-dev-windows-x64-setup.exe](https://github.com/Wasilewsk/aae-advanced/releases/download/dev/AAE-dev-windows-x64-setup.exe). Help, About AAE shows the build.
 
 Both apps update themselves. Check for Updates offers stable releases only.
 
