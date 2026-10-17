@@ -53,6 +53,8 @@ final class AppModel: ObservableObject {
     @Published var partsQuestion: PartsQuestion?
     /// The selected device's accessibility services, while their window is open.
     @Published private(set) var services: [ServiceInfo] = []
+    @Published private(set) var changingService = false
+    private var servicesGeneration = 0
     @Published private(set) var servicesDevice: String?
     @Published private(set) var loadingServices = false
     /// The selected device's apps, while the Apps window is open.
@@ -1682,33 +1684,49 @@ final class AppModel: ObservableObject {
     // MARK: - Accessibility services
 
     func loadServices() {
+        servicesGeneration += 1
+        let request = servicesGeneration
         servicesDevice = selected?.name
+        services = []
         guard let device = selected, device.running else {
-            services = []
+            loadingServices = false
             return
         }
         loadingServices = true
-        withSession { [weak self] session in
-            defer { self?.loadingServices = false }
-            self?.services = try await session.listServices()
+        Task { @MainActor in
+            defer { if request == servicesGeneration { loadingServices = false } }
+            do {
+                let session = try await session(for: device.id)
+                let result = try await session.listServices()
+                guard request == servicesGeneration, selection == device.id, selected?.running == true else { return }
+                services = result
+            } catch {
+                if request == servicesGeneration { announce(error.localizedDescription, tone: .failure) }
+            }
         }
     }
 
-    /// Turns a service on, to stay on, or off. A screen reader turned on
-    /// becomes the device's screen reader instead of the one it had.
+    /// Serialize changes so rapid picker actions cannot switch readers twice
+    /// using stale device metadata, or act on a newly selected device.
     func setService(_ service: ServiceInfo, on: Bool) {
-        if on && service.screenReader {
-            announce("Switching to \(service.label).")
-        }
-        withSession { [weak self] session in
-            try await session.setService(component: service.component, on: on)
-            if on && service.screenReader {
-                self?.announce("\(service.label) is now the screen reader.", tone: .success)
-            } else {
-                self?.announce("\(service.label) \(on ? "on" : "off").", tone: .success)
+        guard !changingService, !loadingServices,
+              let device = selected, device.running,
+              services.contains(where: { $0.component == service.component }) else { return }
+        changingService = true
+        servicesGeneration += 1
+        Task { @MainActor in
+            defer { changingService = false }
+            do {
+                let session = try await session(for: device.id)
+                try await session.setService(component: service.component, on: on)
+                guard selection == device.id else { return }
+                announce("\(service.label) \(on ? "on" : "off").", tone: .success)
+                loadServices()
+                refresh()
+            } catch {
+                announce(error.localizedDescription, tone: .failure)
+                if selection == device.id { loadServices() }
             }
-            self?.loadServices()
-            self?.refresh()
         }
     }
 

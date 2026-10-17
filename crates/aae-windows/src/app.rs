@@ -1230,12 +1230,13 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         action: TOGGLE_PREVIEWS,
     })
     .field(Field::Choice {
-        label: "&Size".into(),
+        label: "Device &type".into(),
         items: vec![
             "Small phone".into(),
             "Phone".into(),
             "Tablet".into(),
             "Foldable".into(),
+            "TV".into(),
         ],
         selected: 1,
     })
@@ -1279,6 +1280,7 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         Some(0) => DeviceProfile::SmallPhone,
         Some(2) => DeviceProfile::Tablet,
         Some(3) => DeviceProfile::Foldable,
+        Some(4) => DeviceProfile::Tv,
         _ => DeviceProfile::Phone,
     };
     let number = |field: usize, what: &str| -> Result<Option<u32>, String> {
