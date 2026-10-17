@@ -20,16 +20,17 @@ struct SamsungView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Samsung Galaxy Firmware").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Samsung Galaxy Firmware — UK").font(.headline).accessibilityAddTraits(.isHeader)
             Text("Firmware for physical Samsung devices. These files cannot run in AAE's emulator.")
             TextField("Search models", text: $query)
+                .onSubmit { if !loading && query.trimmingCharacters(in: .whitespaces).count >= 3 { loadModels() } }
             List(filtered, id: \.id, selection: $modelID) { item in
                 Text(item.label).tag(item.id)
             }
             .accessibilityLabel("Samsung models")
             .frame(minHeight: 150)
-            Picker("Country or carrier", selection: $countryID) {
-                Text("Choose a country or carrier").tag("")
+            Picker("UK carrier or product code", selection: $countryID) {
+                Text("Choose a UK carrier or product code").tag("")
                 ForEach(countries, id: \.id) { Text($0.label).tag($0.id) }
             }
             .disabled(countries.isEmpty)
@@ -47,13 +48,13 @@ struct SamsungView: View {
             .frame(minHeight: 180)
             Text(status).accessibilityLabel(status)
             HStack {
-                Button("Refresh models") { loadModels() }.disabled(loading)
+                Button("Search UK models") { loadModels() }.disabled(loading || query.trimmingCharacters(in: .whitespaces).count < 3)
                 Button("Load more firmware") { loadFirmware(more: true) }.disabled(loading || !hasMore)
                 Link("Open SamMobile", destination: URL(string: "https://www.sammobile.com/firmwares/archive/")!)
             }
         }
         .padding().frame(minWidth: 620, minHeight: 600)
-        .onAppear { if models.isEmpty { loadModels() } }
+        .onAppear { if models.isEmpty { status = "Enter a model number or phone name, then choose Search UK models. Only verified UK variants are shown." } }
         .onChange(of: modelID) { _ in loadCountries() }
         .onChange(of: countryID) { _ in loadFirmware(more: false) }
     }
@@ -61,33 +62,35 @@ struct SamsungView: View {
     private func loadModels() {
         generation += 1
         let request = generation
+        let search = query
+        models = []; countries = []; firmware = []; modelID = nil; countryID = ""; hasMore = false
         loading = true
-        status = "Reading Samsung models…"
+        status = "Checking UK Samsung models…"
         Task { @MainActor in
             defer { if request == generation { loading = false } }
             do {
-                let result = try await samsungModels()
+                let result = try await samsungModels(query: search)
                 guard request == generation else { return }
                 models = result
-                status = "\(result.count) models from SamMobile. Search or select a model."
+                status = result.isEmpty ? "No matching UK Samsung models were found." : "\(result.count) verified UK models. Select a model."
             } catch { if request == generation { status = error.localizedDescription } }
         }
     }
 
     private func loadCountries() {
+        guard let id = modelID else { return }
         generation += 1
         let request = generation
-        let id = modelID
         countries = []; countryID = ""; firmware = []; hasMore = false
-        guard let id, !id.isEmpty else { loading = false; return }
-        loading = true; status = "Reading countries and carriers…"
+        guard !id.isEmpty else { loading = false; return }
+        loading = true; status = "Reading UK carriers and product codes…"
         Task { @MainActor in
             defer { if request == generation { loading = false } }
             do {
                 let result = try await samsungCountries(model: id)
                 guard request == generation else { return }
                 countries = result
-                status = result.isEmpty ? "No countries are listed for this model." : "Choose a country or carrier."
+                status = result.isEmpty ? "No UK firmware regions are listed for this model." : "Choose a UK carrier or product code."
             } catch { if request == generation { status = error.localizedDescription } }
         }
     }
@@ -118,6 +121,6 @@ struct SamsungView: View {
 struct SamsungMenuItem: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
-        Button("Samsung Galaxy Firmware…") { openWindow(id: "samsung") }
+        Button("Samsung Galaxy Firmware — UK…") { openWindow(id: "samsung") }
     }
 }

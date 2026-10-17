@@ -3733,9 +3733,9 @@ fn samsung_choices(items: Vec<aae_core::samsung::Choice>) -> Result<Vec<SamsungC
 }
 
 #[uniffi::export]
-pub async fn samsung_models() -> Result<Vec<SamsungChoice>, AaeError> {
+pub async fn samsung_models(query: String) -> Result<Vec<SamsungChoice>, AaeError> {
     on_runtime(async {
-        tokio::task::spawn_blocking(|| samsung_choices(aae_core::samsung::models()?))
+        tokio::task::spawn_blocking(move || samsung_choices(aae_core::samsung::models(&query)?))
             .await
             .map_err(|e| AaeError::Failed {
                 message: e.to_string(),

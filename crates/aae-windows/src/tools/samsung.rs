@@ -6,54 +6,52 @@ use crate::ui::run_on_ui;
 use aae_ffi::{SamsungChoice, SamsungFirmware};
 
 pub fn show() {
-    announce("Reading Samsung models…", Tone::Info);
-    spawn(async {
-        let result = aae_ffi::samsung_models().await;
+    let answer = forms::run(app::selected().1, Form::new("Samsung Galaxy Firmware — UK")
+        .text("Only models with verified United Kingdom firmware are shown. Enter a model number or a specific phone name, such as SM-G781B or Galaxy S20 FE.")
+        .field(Field::Edit { label: "Search &models".into(), value: String::new() })
+        .button("&Search UK Models", 1, Role::Default).button("Cancel", 0, Role::Cancel));
+    if answer.button == 1 {
+        search(answer.values[1].text());
+    }
+}
+
+fn search(query: String) {
+    announce("Checking UK Samsung models…", Tone::Info);
+    spawn(async move {
+        let result = aae_ffi::samsung_models(query.clone()).await;
         run_on_ui(move || match result {
-            Ok(models) => choose_model(models),
+            Ok(models) => choose_model(models, query),
             Err(e) => announce(&e.to_string(), Tone::Failure),
         });
     });
 }
 
-fn choose_model(models: Vec<SamsungChoice>) {
+fn choose_model(models: Vec<SamsungChoice>, query: String) {
     let owner = app::selected().1;
-    let mut query = String::new();
-    loop {
-        let filtered: Vec<_> = models
-            .iter()
-            .filter(|m| {
-                m.label.to_lowercase().contains(&query.to_lowercase())
-                    || m.id.to_lowercase().contains(&query.to_lowercase())
-            })
-            .collect();
-        let answer = forms::run(owner, Form::new("Samsung Galaxy Firmware")
-            .text("Firmware for physical Samsung devices. These files cannot run in AAE's emulator.")
-            .field(Field::Edit { label: "Search &models".into(), value: query.clone() })
-            .field(Field::Choice { label: "Samsung &model".into(), items: filtered.iter().map(|m| m.label.clone()).collect(), selected: 0 })
-            .button("&Search", 2, Role::Close)
-            .button("&Choose Model", 1, Role::Default)
-            .button("Cancel", 0, Role::Cancel));
-        match answer.button {
-            2 => query = answer.values[1].text(),
-            1 => {
-                let Some(model) = answer.values[2]
-                    .choice()
-                    .and_then(|i| filtered.get(i))
-                    .map(|m| (*m).clone())
-                else {
-                    continue;
-                };
+    let answer = forms::run(owner, Form::new("Samsung Galaxy Firmware — UK")
+        .text(if models.is_empty() { "No matching UK models were found. Try a different model name or number." } else { "Verified UK variants. Firmware is for physical Samsung devices; it requires device-specific hardware support to run in QEMU." })
+        .field(Field::Edit { label: "Search &models".into(), value: query })
+        .field(Field::Choice { label: "UK Samsung &model".into(), items: models.iter().map(|m| m.label.clone()).collect(), selected: 0 })
+        .button("&Search UK Models", 2, Role::Close)
+        .button("&Choose Model", 1, Role::Default)
+        .button("Cancel", 0, Role::Cancel));
+    match answer.button {
+        2 => search(answer.values[1].text()),
+        1 => {
+            if let Some(model) = answer.values[2]
+                .choice()
+                .and_then(|i| models.get(i))
+                .cloned()
+            {
                 load_countries(model);
-                return;
             }
-            _ => return,
         }
+        _ => {}
     }
 }
 
 fn load_countries(model: SamsungChoice) {
-    announce("Reading countries and carriers…", Tone::Info);
+    announce("Reading UK carriers and product codes…", Tone::Info);
     spawn(async move {
         let result = aae_ffi::samsung_countries(model.id.clone()).await;
         run_on_ui(move || match result {
@@ -62,7 +60,7 @@ fn load_countries(model: SamsungChoice) {
                     app::selected().1,
                     Form::new(&model.label)
                         .field(Field::Choice {
-                            label: "&Country or carrier".into(),
+                            label: "UK &carrier or product code".into(),
                             items: countries.iter().map(|c| c.label.clone()).collect(),
                             selected: 0,
                         })
@@ -74,7 +72,10 @@ fn load_countries(model: SamsungChoice) {
                     {
                         load_firmware(model.id, country.id.clone(), 1, Vec::new());
                     } else {
-                        announce("No countries are listed for this model.", Tone::Info);
+                        announce(
+                            "No UK firmware regions are listed for this model.",
+                            Tone::Info,
+                        );
                     }
                 }
             }

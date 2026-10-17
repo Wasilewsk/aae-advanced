@@ -1,13 +1,13 @@
 //! SamMobile's public firmware catalogue. These packages target physical
 //! Samsung hardware; they are never offered as bootable emulator images.
 use crate::error::{Error, Result};
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::time::Duration;
 
 const API: &str =
     "https://www.sammobile.com/wp-content/plugins/sam-firmwarepage/includes/SMFirmware/ajax";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Choice {
     pub id: String,
     pub value: String,
@@ -53,7 +53,10 @@ fn get<T: DeserializeOwned>(endpoint: &str) -> Result<Vec<T>> {
         .get(format!("{API}/{endpoint}"))
         .header("User-Agent", "AAE-Advanced/0.7 (firmware catalogue)")
         .call()
-        .map_err(|e| Error::Message(format!("SamMobile could not be reached: {e}")))?
+        .map_err(|e| match e {
+            ureq::Error::StatusCode(429) => Error::Message("SamMobile is limiting requests. Wait a few minutes and search again.".into()),
+            other => Error::Message(format!("SamMobile could not be reached: {other}")),
+        })?
         .body_mut()
         .with_config()
         .limit(8 * 1024 * 1024)
@@ -63,19 +66,78 @@ fn get<T: DeserializeOwned>(endpoint: &str) -> Result<Vec<T>> {
         .map_err(|e| Error::Message(format!("SamMobile's catalogue format could not be read: {e}. Try opening SamMobile in your browser.")))
 }
 
-pub fn models() -> Result<Vec<Choice>> {
-    let mut models: Vec<Choice> = get("ajax.search.models.php?term=all")?;
-    models.sort_by_key(|m| m.value.to_lowercase());
-    let mut seen = std::collections::HashSet::new();
-    models.retain(|m| seen.insert(m.id.clone()));
-    Ok(models)
+/// Match UK regions, including carrier-specific firmware.
+fn is_uk(label: &str) -> bool {
+    let label = label.trim();
+    label
+        .get(..14)
+        .is_some_and(|s| s.eq_ignore_ascii_case("United Kingdom"))
+        && label
+            .get(14..)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(" ("))
 }
 
+fn search_term(query: &str) -> Result<String> {
+    let query = query.trim();
+    if query.len() < 3
+        || query.len() > 80
+        || query.eq_ignore_ascii_case("all")
+        || !query
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b' ')
+    {
+        return Err(Error::Message("Enter a model number or phone name with at least three letters or numbers, such as SM-G781B or Galaxy S20 FE.".into()));
+    }
+    Ok(query.replace(' ', "%20"))
+}
+
+/// Search first, then verify UK availability for each matching model. This
+/// avoids scanning thousands of international models on every refresh.
+pub fn models(query: &str) -> Result<Vec<Choice>> {
+    let term = search_term(query)?;
+    let mut models: Vec<Choice> = get(&format!("ajax.search.models.php?term={term}"))?;
+    if models.len() > 30 {
+        return Err(Error::Message("That search matches too many Samsung models. Enter a more specific name or the exact model number to check UK availability.".into()));
+    }
+    let mut uk_models = Vec::new();
+    models.sort_by_key(|m| m.value.to_lowercase());
+    let mut seen = std::collections::HashSet::new();
+    for model in models {
+        if seen.insert(model.id.clone()) && !countries(&model.id)?.is_empty() {
+            uk_models.push(model);
+        }
+    }
+    Ok(uk_models)
+}
+
+/// Only verified UK country/carrier choices leave the shared API. Country
+/// records are cached for one day so repeated searches don't hammer the site.
 pub fn countries(model: &str) -> Result<Vec<Choice>> {
-    get(&format!(
-        "ajax.countriesbymodel.php?model={}",
-        identifier(model)?
-    ))
+    identifier(model)?;
+    let cache = crate::paths::data_dir()
+        .join("cache/samsung-regions")
+        .join(format!("{model}.json"));
+    let fresh = std::fs::metadata(&cache)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| std::time::SystemTime::now().duration_since(t).ok())
+        .is_some_and(|age| age < Duration::from_secs(24 * 60 * 60));
+    if fresh {
+        if let Ok(text) = std::fs::read_to_string(&cache) {
+            if let Ok(countries) = serde_json::from_str::<Vec<Choice>>(&text) {
+                return Ok(countries.into_iter().filter(|c| is_uk(&c.value)).collect());
+            }
+        }
+    }
+    let countries: Vec<Choice> = get(&format!("ajax.countriesbymodel.php?model={model}"))?;
+    if let Some(dir) = cache.parent() {
+        if std::fs::create_dir_all(dir).is_ok() {
+            if let Ok(text) = serde_json::to_vec(&countries) {
+                let _ = std::fs::write(&cache, text);
+            }
+        }
+    }
+    Ok(countries.into_iter().filter(|c| is_uk(&c.value)).collect())
 }
 
 /// One page, exactly as the source lists it; callers may request more until
@@ -84,11 +146,21 @@ pub fn firmwares(model: &str, country: &str, page: u32) -> Result<Vec<Firmware>>
     if page == 0 {
         return Err(Error::Message("Firmware pages start at 1.".into()));
     }
-    get(&format!(
-        "ajax.firmwaresbycountry.php?model={}&country={}&page={page}",
-        identifier(model)?,
-        identifier(country)?
-    ))
+    identifier(model)?;
+    identifier(country)?;
+    if !countries(model)?.iter().any(|c| c.id == country) {
+        return Err(Error::Message(
+            "Only United Kingdom firmware and UK carrier codes are available.".into(),
+        ));
+    }
+    let firmware: Vec<Firmware> = get(&format!(
+        "ajax.firmwaresbycountry.php?model={model}&country={country}&page={page}"
+    ))?;
+    // Defend against ignored query parameters or a changed upstream endpoint.
+    Ok(firmware
+        .into_iter()
+        .filter(|f| f.model == model && f.product_code == country && is_uk(&f.country))
+        .collect())
 }
 
 /// Validate links from the third party before offering them to a host browser.
@@ -115,6 +187,34 @@ pub fn source_url(url: &str) -> Result<String> {
 mod tests {
     use super::*;
     #[test]
+    fn only_uk_and_uk_carrier_labels_are_accepted() {
+        for uk in [
+            "United Kingdom",
+            "United Kingdom (EE)",
+            "United Kingdom (BTU)",
+        ] {
+            assert!(is_uk(uk));
+        }
+        for other in [
+            "South Africa",
+            "United States",
+            "Not United Kingdom",
+            "United Kingdomish",
+        ] {
+            assert!(!is_uk(other));
+        }
+    }
+
+    #[test]
+    fn searches_are_bounded_and_query_safe() {
+        assert_eq!(search_term("Galaxy S20 FE").unwrap(), "Galaxy%20S20%20FE");
+        assert_eq!(search_term("SM-G781B").unwrap(), "SM-G781B");
+        for query in ["", "S2", "all", "SM-G781B&country=XFA", "../", "%"] {
+            assert!(search_term(query).is_err());
+        }
+    }
+
+    #[test]
     fn queries_reject_injection() {
         for bad in ["", "../", "SM-G781B&country=XXX", "BTU#", "a b"] {
             assert!(identifier(bad).is_err());
@@ -124,7 +224,10 @@ mod tests {
     }
     #[test]
     fn source_links_stay_on_sammobile() {
-        assert_eq!(source_url("/samsung/galaxy-tab s/firmware/#SM-T705W").unwrap(), "https://www.sammobile.com/samsung/galaxy-tab%20s/firmware/#SM-T705W");
+        assert_eq!(
+            source_url("/samsung/galaxy-tab s/firmware/#SM-T705W").unwrap(),
+            "https://www.sammobile.com/samsung/galaxy-tab%20s/firmware/#SM-T705W"
+        );
         assert_eq!(
             source_url("/samsung/galaxy-s20-fe/firmware/#SM-G781B").unwrap(),
             "https://www.sammobile.com/samsung/galaxy-s20-fe/firmware/#SM-G781B"
