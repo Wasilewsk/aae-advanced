@@ -1,8 +1,8 @@
 # Builds AAE for Windows and the Mac from every push to master and publishes
 # them as the "dev" prerelease, replacing the last one, so they can be tried
 # before a stable release. The download links stay the same:
-# https://github.com/aaron-gh/accessible-android-emulator/releases/download/dev/AAE-dev-windows-x64-setup.exe
-# https://github.com/aaron-gh/accessible-android-emulator/releases/download/dev/AAE-dev.dmg
+# https://github.com/Wasilewsk/aae-advanced/releases/download/dev/AAE-dev-windows-x64-setup.exe
+# https://github.com/Wasilewsk/aae-advanced/releases/download/dev/AAE-dev.dmg
 name: Development build
 
 on:

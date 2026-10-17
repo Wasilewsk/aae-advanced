@@ -50,7 +50,7 @@ STAGE="windows/build/$NAME"
 rm -rf "$STAGE"
 mkdir -p "$STAGE" windows/dist
 BIN="target/$TARGET/release"
-cp "$BIN/AccessibleAndroidEmulator.exe" "$BIN/aae.exe" "$STAGE/"
+cp "$BIN/AAEAdvanced.exe" "$BIN/aae.exe" "$STAGE/"
 HELPER=android/helper/build/outputs/apk/release/helper-release.apk
 if [[ -f "$HELPER" ]]; then
     cp "$HELPER" "$STAGE/aae-helper.apk"

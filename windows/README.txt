@@ -1,4 +1,4 @@
-Accessible Android Emulator (AAE) for Windows: test build
+AAE Advanced for Windows: test build
 
 AAE creates, runs and tests Android virtual devices without sighted help. This is an early Windows build, for testing.
 
@@ -11,7 +11,7 @@ WHAT YOU NEED
 
 STARTING
 
-Run the installer, AAE-...-setup.exe. It installs AAE for you alone, in your own Programs folder, with no administrator prompt, and adds Accessible Android Emulator to the Start menu. Uninstalling it, from Installed apps in Settings, leaves your devices and Android versions in place.
+Run the installer, AAE-...-setup.exe. It installs AAE for you alone, in your own Programs folder, with no administrator prompt, and adds AAE Advanced to the Start menu. Uninstalling it, from Installed apps in Settings, leaves your devices and Android versions in place.
 
 AAE isn't signed yet, so Windows SmartScreen may say it protected your PC. Choose "More info", then "Run anyway".
 
@@ -60,4 +60,4 @@ LICENCES
 
 AAE is under the Apache License 2.0, in LICENSE.txt. nvdaControllerClient.dll is NV Access's NVDA controller client, unchanged, under the GNU Lesser General Public License 2.1, in nvdaControllerClient-LICENSE.txt; its source is part of NVDA, at https://github.com/nvaccess/nvda. WinSparkle.dll is WinSparkle, by Vaclav Slavik, unchanged, under the MIT licence, in WinSparkle-LICENSE.txt.
 
-https://github.com/aaron-gh/accessible-android-emulator
+https://github.com/Wasilewsk/aae-advanced

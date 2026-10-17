@@ -41,7 +41,7 @@ fi
 # Prints: sparkle:edSignature="…" length="…"
 SIGNATURE=$("$SIGN_UPDATE" ${KEY_ARGS[@]+"${KEY_ARGS[@]}"} "$SETUP")
 
-URL="${AAE_DOWNLOAD_URL:-https://github.com/aaron-gh/accessible-android-emulator/releases/download/v$VERSION}/$(basename "$SETUP")"
+URL="${AAE_DOWNLOAD_URL:-https://github.com/Wasilewsk/aae-advanced/releases/download/v$VERSION}/$(basename "$SETUP")"
 APPCAST="${AAE_APPCAST:-$ROOT/appcast-windows.xml}"
 python3 -I - "$APPCAST" "$VERSION" "$AAE_BUILD_NUMBER" "$URL" "$SIGNATURE" "$NOTES" <<'PY'
 import email.utils, html, pathlib, sys

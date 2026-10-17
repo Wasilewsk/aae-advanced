@@ -22,7 +22,7 @@ class SpeechCheck(private val context: Context, private val done: (Result) -> Un
 
     companion object {
         /** What the check says. The speech log leaves it out. */
-        const val PHRASE = "Accessible Android Emulator speech check."
+        const val PHRASE = "AAE Advanced speech check."
     }
 
     private val handler = Handler(Looper.getMainLooper())

@@ -9,9 +9,9 @@
     <key>CFBundleIdentifier</key>
     <string>io.github.aaron-gh.AAE</string>
     <key>CFBundleName</key>
-    <string>AAE</string>
+    <string>AAE Advanced</string>
     <key>CFBundleDisplayName</key>
-    <string>Accessible Android Emulator</string>
+    <string>AAE Advanced</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

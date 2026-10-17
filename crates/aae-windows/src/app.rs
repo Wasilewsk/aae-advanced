@@ -165,7 +165,7 @@ impl ProgressListener for Progress {
     }
 }
 
-struct Download;
+pub(crate) struct Download;
 
 impl DownloadListener for Download {
     fn downloaded(&self, percent: u32) {
@@ -265,7 +265,7 @@ pub struct App {
     shown_rows: Vec<String>,
     /// The screen last shown, to put the focus on a new one.
     shown_screen: Option<Screen>,
-    download: Option<(String, u32)>,
+    pub(crate) download: Option<(String, u32)>,
     versions: Vec<VersionInfo>,
     needs_setup: bool,
     setup_status: Option<SetupStatus>,
@@ -3493,7 +3493,7 @@ fn about() {
         hwnd,
         "About AAE",
         &format!(
-            "Accessible Android Emulator {}\n\nCreate, run and test Android virtual devices with a screen reader.\n\nhttps://github.com/aaron-gh/accessible-android-emulator\n\nLicensed under the Apache License 2.0.",
+            "AAE Advanced {}\n\nCreate, run and test Android virtual devices with a screen reader.\n\nhttps://github.com/Wasilewsk/aae-advanced\n\nLicensed under the Apache License 2.0. AAE Advanced is a continuation of the Accessible Android Emulator by aaron-gh.",
             version()
         ),
     );

@@ -1,6 +1,6 @@
 [package]
 name = "aae-core"
-description = "Core library for the Accessible Android Emulator: SDK, devices, emulator control, audio and speech."
+description = "Core library for AAE Advanced: SDK, devices, emulator control, audio and speech."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

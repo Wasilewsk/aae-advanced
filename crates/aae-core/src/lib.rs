@@ -1,4 +1,4 @@
-//! Core of the Accessible Android Emulator (AAE).
+//! Core of AAE Advanced (AAE).
 //!
 //! Platform-independent parts: Android SDK, device store, emulator control
 //! over gRPC and adb, audio, and provisioning. The apps, CLI, MCP and remote
@@ -35,6 +35,7 @@ mod platform;
 pub mod provision;
 pub mod qmp;
 pub mod recording;
+pub mod rom;
 pub mod route;
 pub mod screenreader;
 pub mod sdk;

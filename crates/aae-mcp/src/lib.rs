@@ -238,13 +238,13 @@ impl AaeServer {
     }
 }
 
-const INSTRUCTIONS: &str = "AAE, the Accessible Android Emulator, runs Android virtual devices that each have a screen reader (such as TalkBack or Backtalk) on. Use it to test Android apps, especially their accessibility. Devices are named; tools take a `device`, which can be left out when only one is running. Typical flow: list_devices, start_device if needed, then look with screenshot, inspect (the accessibility tree) and touch_targets, act with tap_target or gesture (as a screen reader user would: swipe-right moves to the next item, double-tap activates it) or type_text and press_key, and listen with the speech log (speech_log_start, then speech_log) to hear exactly what the screen reader said. Snapshots make repeatable starting points.";
+const INSTRUCTIONS: &str = "AAE Advanced (formerly the Accessible Android Emulator) runs Android virtual devices that each have a screen reader (such as TalkBack or Backtalk) on. Use it to test Android apps, especially their accessibility. Devices are named; tools take a `device`, which can be left out when only one is running. Typical flow: list_devices, start_device if needed, then look with screenshot, inspect (the accessibility tree) and touch_targets, act with tap_target or gesture (as a screen reader user would: swipe-right moves to the next item, double-tap activates it) or type_text and press_key, and listen with the speech log (speech_log_start, then speech_log) to hear exactly what the screen reader said. Snapshots make repeatable starting points.";
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for AaeServer {
     fn get_info(&self) -> ServerConfig {
         let mut info = Implementation::new("aae", env!("CARGO_PKG_VERSION"));
-        info.title = Some("Accessible Android Emulator".into());
+        info.title = Some("AAE Advanced".into());
         let mut instructions = INSTRUCTIONS.to_string();
         if !self.options.allow_destructive {
             instructions.push_str(" Tools that delete devices, apps or data, or run shell commands, are off; the user can turn them on by starting the server with --allow-destructive.");

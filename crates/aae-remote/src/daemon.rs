@@ -184,9 +184,9 @@ pub fn install() -> Result<String, String> {
     {
         let app = aae
             .parent()
-            .map(|d| d.join("AccessibleAndroidEmulator.exe"))
+            .map(|d| d.join("AAEAdvanced.exe"))
             .filter(|p| p.is_file())
-            .ok_or("Serving at login needs the Windows app, AccessibleAndroidEmulator.exe, next to aae.exe.")?;
+            .ok_or("Serving at login needs the Windows app, AAEAdvanced.exe, next to aae.exe.")?;
         let command = format!("\"{}\" --serve", app.display());
         let out = run(
             "reg",

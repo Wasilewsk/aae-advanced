@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "AccessibleAndroidEmulator"
+name = "AAEAdvanced"
 path = "src/main.rs"
 
 [target.'cfg(windows)'.dependencies]

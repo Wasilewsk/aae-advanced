@@ -2,7 +2,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
     <channel>
         <title>AAE Updates for Windows</title>
-        <description>Updates for AAE, the Accessible Android Emulator, on Windows.</description>
+        <description>Updates for AAE Advanced on Windows.</description>
         <language>en</language>
         <item>
             <title>Version 0.6.1</title>

@@ -36,12 +36,12 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "FileDescription", "Accessible Android Emulator"
+      VALUE "FileDescription", "AAE Advanced"
       VALUE "FileVersion", "{version}"
-      VALUE "ProductName", "Accessible Android Emulator"
+      VALUE "ProductName", "AAE Advanced"
       VALUE "ProductVersion", "{version}"
-      VALUE "InternalName", "AAE"
-      VALUE "OriginalFilename", "AccessibleAndroidEmulator.exe"
+      VALUE "InternalName", "AAEAdvanced"
+      VALUE "OriginalFilename", "AAEAdvanced.exe"
       VALUE "LegalCopyright", "Apache License 2.0"
     END
   END

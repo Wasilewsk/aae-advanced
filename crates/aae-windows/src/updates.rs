@@ -17,7 +17,7 @@ use crate::ui;
 const FEED_URL: &str = match option_env!("AAE_WINDOWS_FEED_URL") {
     Some(url) => url,
     None => {
-        "https://raw.githubusercontent.com/aaron-gh/accessible-android-emulator/master/appcast-windows.xml"
+        "https://raw.githubusercontent.com/Wasilewsk/aae-advanced/master/appcast-windows.xml"
     }
 };
 
@@ -123,8 +123,8 @@ pub fn start(display_version: &str) {
     };
     let url: Vec<u8> = FEED_URL.bytes().chain([0]).collect();
     let key: Vec<u8> = PUBLIC_KEY.trim().bytes().chain([0]).collect();
-    let company = ui::wide("aaron-gh");
-    let name = ui::wide("Accessible Android Emulator");
+    let company = ui::wide("Wasilewsk");
+    let name = ui::wide("AAE Advanced");
     let version = ui::wide(display_version);
     let build = ui::wide(BUILD_NUMBER);
     unsafe {

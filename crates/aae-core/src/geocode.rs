@@ -46,7 +46,7 @@ pub fn look_up(text: &str) -> Result<Option<Place>> {
         // Nominatim asks every program to say who it is.
         .header(
             "User-Agent",
-            "accessible-android-emulator (https://github.com/aaron-gh/accessible-android-emulator)",
+            "aae-advanced (https://github.com/Wasilewsk/aae-advanced)",
         )
         .call()
         .map_err(|e| failed(e.to_string()))?

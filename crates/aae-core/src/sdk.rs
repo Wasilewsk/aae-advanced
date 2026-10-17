@@ -170,6 +170,9 @@ pub struct SystemImage {
     /// emulator expects in `image.sysdir.1`.
     pub sysdir: String,
     pub path: PathBuf,
+    /// For an image imported from outside Google's catalogue, the name it was
+    /// given, such as "LineageOS 23". None otherwise.
+    pub rom_name: Option<String>,
 }
 
 impl SystemImage {
@@ -206,6 +209,7 @@ impl SystemImage {
         )?;
         let relative = dir.strip_prefix(sdk_root).ok()?;
         let sysdir = format!("{}/", relative.to_string_lossy().replace('\\', "/"));
+        let rom_name = crate::rom::read_rom(dir).1;
         Some(SystemImage {
             api: release.api,
             release,
@@ -213,6 +217,7 @@ impl SystemImage {
             abi,
             sysdir,
             path: dir.to_path_buf(),
+            rom_name,
         })
     }
 
@@ -233,6 +238,9 @@ impl SystemImage {
 impl fmt::Display for SystemImage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}, {}", self.release.describe(), self.kind())?;
+        if let Some(name) = &self.rom_name {
+            write!(f, " ({name})")?;
+        }
         if self.release.page_16k {
             write!(f, ", 16 KB pages")?;
         }
@@ -253,6 +261,12 @@ pub fn image_kind(tag: &str) -> &'static str {
         "google-tv" => "Google TV",
         "google_apis" | "google_atd" => "With Google services",
         t if t.contains("playstore") => "With Google Play",
+        // Images AAE imported from outside Google's catalogue. A number after
+        // the tag, as in "lineageos-2", means a second image of the same kind.
+        t if t == "grapheneos" || t.starts_with("grapheneos-") => "GrapheneOS",
+        t if t == "eos" || t.starts_with("eos-") => "/e/OS",
+        t if t == "lineageos" || t == "lineage" || t.starts_with("lineageos-") => "LineageOS",
+        t if t.starts_with("custom") => "Custom image",
         // Such as google_apis_ps16k, with 16 KB memory pages.
         t if t.starts_with("google_apis") => "With Google services",
         t if t.starts_with("default") => "Plain Android",
@@ -433,6 +447,17 @@ mod tests {
     fn names_android_versions() {
         assert_eq!(android_name(35), "Android 15 (API 35)");
         assert_eq!(android_name(99), "Android API 99");
+    }
+
+    #[test]
+    fn names_imported_images() {
+        assert_eq!(image_kind("grapheneos"), "GrapheneOS");
+        assert_eq!(image_kind("grapheneos-2"), "GrapheneOS");
+        assert_eq!(image_kind("eos"), "/e/OS");
+        assert_eq!(image_kind("lineageos"), "LineageOS");
+        assert_eq!(image_kind("lineage"), "LineageOS");
+        assert_eq!(image_kind("custom-my-build"), "Custom image");
+        assert_eq!(image_kind("google_apis"), "With Google services");
     }
 
     #[test]

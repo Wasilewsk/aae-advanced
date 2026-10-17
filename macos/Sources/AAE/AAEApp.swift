@@ -8,7 +8,7 @@ struct AAEApp: App {
     @StateObject private var serving = Serving()
 
     var body: some Scene {
-        Window("Accessible Android Emulator", id: "main") {
+        Window("AAE Advanced", id: "main") {
             ContentView()
                 .environmentObject(model)
                 .onAppear { appDelegate.model = model }

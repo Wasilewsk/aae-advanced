@@ -1,15 +1,18 @@
 //! The Android Versions window: the installed Android versions, how much
-//! space each takes, which devices use it, and a way to delete the ones no
-//! device needs. Below them, whether the emulator and tools have updates.
+//! space each takes, which devices use it, and a way to import an image built
+//! outside Google's catalogue or delete a version no device needs. Below them,
+//! whether the emulator and tools have updates.
 
 use std::cell::RefCell;
+use std::path::Path;
+use std::sync::Arc;
 
-use aae_ffi::{InstalledImageInfo, SetupStatus};
+use aae_ffi::{ImageInfo, InstalledImageInfo, RomKind, SetupStatus};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{VK_F5, VK_R};
 
-use crate::app::{self, announce, engine, say, spawn};
-use crate::forms;
+use crate::app::{self, Download, announce, engine, say, spawn};
+use crate::forms::{self, Field, Form, Role};
 use crate::panels::{self, Handler, Panel};
 use crate::speech::Tone;
 use crate::ui::{self, run_on_ui};
@@ -20,6 +23,7 @@ const LIST: u16 = 1000;
 const DELETE: u16 = 1001;
 const REFRESH: u16 = 1002;
 const UPDATE: u16 = 1003;
+const IMPORT: u16 = 1004;
 
 #[derive(Clone, Copy)]
 struct Controls {
@@ -62,9 +66,17 @@ pub fn show() {
     }
     let mut panel = Panel::new(KIND, "Android Versions", 600, 520);
     panel.text("A version can be deleted once none of AAE's devices use it. Android Studio shares these files, so its devices may use them too.");
+    panel.text("Images built outside Google's catalogue, such as /e/OS, LineageOS or GrapheneOS, can be imported here.");
     let status = panel.text("Reading…");
     let list = panel.list("Installed Android versions", LIST, 10, true);
-    panel.buttons(&[("Delete…", DELETE), ("Refresh", REFRESH)], None);
+    panel.buttons(
+        &[
+            ("Import Image…", IMPORT),
+            ("Delete…", DELETE),
+            ("Refresh", REFRESH),
+        ],
+        None,
+    );
     panel.text("Emulator and Tools");
     let tools = panel.text("Checking for updates…");
     let update = panel.buttons(&[("Update the Emulator and Tools", UPDATE)], None)[0];
@@ -152,6 +164,7 @@ impl Handler for Window {
     fn command(&mut self, panel: &Panel, id: u16) {
         match id {
             REFRESH => load(),
+            IMPORT => import(panel.hwnd),
             UPDATE => {
                 if let Some(c) = STATE.with(|s| s.borrow().window) {
                     ui::enable(c.update, false);
@@ -180,6 +193,167 @@ impl Handler for Window {
             s.images.clear();
         });
     }
+}
+
+/// Asks what to import, then copies an Android image from outside Google's
+/// catalogue into the SDK, where New Device offers it.
+fn import(owner: HWND) {
+    let Some(engine) = engine() else { return };
+    const CHOOSE_FILE: i32 = 2;
+    const CHOOSE_FOLDER: i32 = 3;
+
+    let images = engine.images();
+    let mut base_items = vec!["No, this is a whole emulator image".to_string()];
+    base_items.extend(images.iter().map(|image: &ImageInfo| image.description.clone()));
+
+    let mut form = Form::new("Import an Android Image")
+        .text(
+            "Choose an emulator image you built or downloaded: a folder of its files, a zip of \
+             one, as /e/OS and LineageOS's emulator builds make, or a single system image to put \
+             on an installed version's files. A single phone system image may not boot: it expects \
+             a phone's kernel and vendor.",
+        )
+        .field(Field::Edit {
+            label: "The image folder, zip or system image".into(),
+            value: String::new(),
+        })
+        .field(Field::Choice {
+            label: "Which Android it is".into(),
+            items: vec![
+                "GrapheneOS".into(),
+                "/e/OS".into(),
+                "LineageOS".into(),
+                "Custom image".into(),
+            ],
+            selected: 3,
+        })
+        .field(Field::Edit {
+            label: "A name to show beside it, such as /e/OS 4.2 (optional)".into(),
+            value: String::new(),
+        })
+        .field(Field::Edit {
+            label: "The Android version, if the image doesn't say, such as 36 (optional)".into(),
+            value: String::new(),
+        })
+        .field(Field::Choice {
+            label: "A single system image uses the files of".into(),
+            items: base_items,
+            selected: 0,
+        });
+    form.action = Some(Box::new(|action, handle| {
+        let chosen = if action == CHOOSE_FILE {
+            ui::open_files(
+                handle.dialog,
+                "Choose an Android Image",
+                &[
+                    ("Android images", "*.zip;*.img;*.gz"),
+                    ("All files", "*.*"),
+                ],
+                false,
+            )
+            .into_iter()
+            .next()
+        } else {
+            ui::choose_folder(handle.dialog, "Choose the Folder of Image Files")
+        };
+        if let Some(path) = chosen {
+            // Field 0 is the paragraph; the path is field 1.
+            handle.set_text(1, &path);
+            if let Some(field) = handle.control(1) {
+                ui::focus(field);
+            }
+        }
+    }));
+    let answer = forms::run(
+        owner,
+        form.button("Choose Image File…", CHOOSE_FILE, Role::Action)
+            .button("Choose Image Folder…", CHOOSE_FOLDER, Role::Action)
+            .button("Import", 1, Role::Default)
+            .button("Cancel", 0, Role::Cancel),
+    );
+    if answer.button != 1 {
+        return;
+    }
+    let path = answer.values[1].text().trim().trim_matches('"').to_string();
+    if path.is_empty() || !Path::new(&path).exists() {
+        announce(
+            "Choose the image's folder, its zip, or its system image first. The path must \
+             exist.",
+            Tone::Failure,
+        );
+        return;
+    }
+    let api = match answer.values[4].text().trim() {
+        "" => None,
+        text => match text.split('.').next().unwrap_or(text).parse::<u32>() {
+            Ok(api) => Some(api),
+            Err(_) => {
+                announce(
+                    "The Android version must be a number, such as 36. Leave it empty if the \
+                     image says its version.",
+                    Tone::Failure,
+                );
+                return;
+            }
+        },
+    };
+    let rom = match answer.values[2].choice() {
+        Some(0) => RomKind::GrapheneOs,
+        Some(1) => RomKind::Eos,
+        Some(2) => RomKind::LineageOs,
+        _ => RomKind::Custom,
+    };
+    let base = answer.values[5]
+        .choice()
+        .and_then(|choice| choice.checked_sub(1))
+        .and_then(|index| images.get(index))
+        .map(|image| image.sysdir.clone());
+    let name = match answer.values[3].text().trim() {
+        "" => None,
+        name => Some(name.to_string()),
+    };
+    let what = name.clone().unwrap_or_else(|| {
+        match rom {
+            RomKind::GrapheneOs => "the GrapheneOS image",
+            RomKind::Eos => "the /e/OS image",
+            RomKind::LineageOs => "the LineageOS image",
+            RomKind::Custom => "the Android image",
+        }
+        .to_string()
+    });
+    app::with(|app| {
+        app.download = Some((what.clone(), 0));
+        app.render();
+    });
+    announce(
+        &format!(
+            "Importing {what}. The image is copied, which can take a while. Control Shift I \
+             reports progress."
+        ),
+        Tone::Info,
+    );
+    spawn(async move {
+        match engine
+            .import_image(path, rom, name, api, base, Arc::new(Download))
+            .await
+        {
+            Ok(image) => say(
+                format!(
+                    "{} is installed. Create a device from it in New Device.",
+                    image.description
+                ),
+                Tone::Success,
+            ),
+            Err(e) => say(format!("{what} wasn't imported. {e}"), Tone::Failure),
+        }
+        run_on_ui(|| {
+            app::with(|app| {
+                app.download = None;
+                app.render();
+            });
+            load();
+        });
+    });
 }
 
 /// Asks, then deletes an installed Android version.

@@ -215,6 +215,26 @@ fn form(tag: &str) -> String {
     Profile::for_image(tag).map_or(String::new(), |p| p.describe().to_string())
 }
 
+/// An Android image from outside Google's catalogue.
+#[derive(uniffi::Enum, Clone, Copy)]
+pub enum RomKind {
+    GrapheneOs,
+    Eos,
+    LineageOs,
+    Custom,
+}
+
+impl From<RomKind> for aae_core::rom::Rom {
+    fn from(rom: RomKind) -> Self {
+        match rom {
+            RomKind::GrapheneOs => aae_core::rom::Rom::GrapheneOs,
+            RomKind::Eos => aae_core::rom::Rom::Eos,
+            RomKind::LineageOs => aae_core::rom::Rom::LineageOs,
+            RomKind::Custom => aae_core::rom::Rom::Custom,
+        }
+    }
+}
+
 /// A licence the user has to accept before a download.
 #[derive(uniffi::Record, Clone)]
 pub struct LicenceInfo {
@@ -1306,6 +1326,65 @@ impl Engine {
                     }
                     InstallProgress::Verifying => listener.stage("Checking the download.".into()),
                     InstallProgress::Unpacking => listener.stage("Unpacking.".into()),
+                })
+            })
+            .await
+            .map_err(|e| AaeError::Failed {
+                message: e.to_string(),
+            })??;
+            Ok(ImageInfo {
+                sysdir: installed.sysdir.clone(),
+                api: installed.api,
+                release: installed.release.id.clone(),
+                description: installed.to_string(),
+                form: form(&installed.tag),
+            })
+        })
+        .await
+    }
+
+    /// Installs an Android image from outside Google's catalogue: GrapheneOS,
+    /// /e/OS, LineageOS, or one built on this computer.
+    ///
+    /// `source` is a folder of emulator image files, a zip of one, or a single
+    /// system image. A single system image is put on the files of the installed
+    /// Android version `base_sysdir` names, which supplies its kernel, ramdisk
+    /// and vendor. `api` is used when the image doesn't say its version.
+    pub async fn import_image(
+        &self,
+        source: String,
+        rom: RomKind,
+        name: Option<String>,
+        api: Option<u32>,
+        base_sysdir: Option<String>,
+        listener: Arc<dyn DownloadListener>,
+    ) -> Result<ImageInfo, AaeError> {
+        let sdk = self.sdk.clone();
+        on_runtime(async move {
+            let base = match base_sysdir {
+                Some(sysdir) => Some(
+                    sdk.system_images()
+                        .into_iter()
+                        .find(|i| i.sysdir == sysdir)
+                        .ok_or_else(|| AaeError::Failed {
+                            message: "That Android version is no longer installed.".into(),
+                        })?,
+                ),
+                None => None,
+            };
+            let options = aae_core::rom::ImportOptions { name, api, base };
+            let rom: aae_core::rom::Rom = rom.into();
+            let installed = tokio::task::spawn_blocking(move || {
+                let mut last = u32::MAX;
+                aae_core::rom::install(&sdk, &PathBuf::from(source), rom, &options, |p| match p {
+                    aae_core::rom::Progress::Unpacking => listener.stage("Unpacking.".into()),
+                    aae_core::rom::Progress::Copying { .. } => {
+                        let percent = p.percent().unwrap_or(0);
+                        if percent != last {
+                            last = percent;
+                            listener.downloaded(percent);
+                        }
+                    }
                 })
             })
             .await

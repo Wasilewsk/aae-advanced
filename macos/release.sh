@@ -58,7 +58,7 @@ fi
 # Prints: sparkle:edSignature="…" length="…"
 SIGNATURE=$("$SIGN_UPDATE" ${KEY_ARGS[@]+"${KEY_ARGS[@]}"} "$DMG")
 
-URL="${AAE_DOWNLOAD_URL:-https://github.com/aaron-gh/accessible-android-emulator/releases/download/v$VERSION}/AAE-$VERSION.dmg"
+URL="${AAE_DOWNLOAD_URL:-https://github.com/Wasilewsk/aae-advanced/releases/download/v$VERSION}/AAE-$VERSION.dmg"
 APPCAST="${AAE_APPCAST:-$ROOT/appcast.xml}"
 python3 -I - "$APPCAST" "$VERSION" "$BUILD_NUMBER" "$URL" "$SIGNATURE" "$NOTES" <<'PY'
 import email.utils, html, pathlib, sys
@@ -69,7 +69,7 @@ if not path.exists():
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
     <channel>
         <title>AAE Updates</title>
-        <description>Updates for AAE, the Accessible Android Emulator.</description>
+        <description>Updates for AAE Advanced.</description>
         <language>en</language>
     </channel>
 </rss>

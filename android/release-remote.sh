@@ -16,7 +16,7 @@ VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 export AAE_BUILD_NUMBER="${AAE_BUILD_NUMBER:-$(git rev-list --count HEAD)}"
 APK="$ROOT/android/dist/AAE-Remote-$VERSION.apk"
 android/build-remote.sh "$APK"
-URL="https://github.com/aaron-gh/accessible-android-emulator/releases/download/v$VERSION/AAE-Remote-$VERSION.apk"
+URL="https://github.com/Wasilewsk/aae-advanced/releases/download/v$VERSION/AAE-Remote-$VERSION.apk"
 python3 -I - "$ROOT/appcast-android.json" "$VERSION" "$AAE_BUILD_NUMBER" "$URL" "$APK" "$NOTES" <<'PY'
 import hashlib, json, pathlib, sys
 feed, version, build, url, apk, notes = sys.argv[1:]

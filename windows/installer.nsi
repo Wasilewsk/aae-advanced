@@ -11,8 +11,8 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel user
 ManifestDPIAware true
 
-!define NAME "Accessible Android Emulator"
-!define EXE "AccessibleAndroidEmulator.exe"
+!define NAME "AAE Advanced"
+!define EXE "AAEAdvanced.exe"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\AAE"
 
 Name "${NAME}"
@@ -75,6 +75,8 @@ FunctionEnd
 Section "Install"
     !insertmacro WaitForAAEToClose
     SetOutPath "$INSTDIR"
+    ; Earlier versions named the app's program AccessibleAndroidEmulator.exe.
+    Delete "$INSTDIR\AccessibleAndroidEmulator.exe"
     File /r "${STAGE}/*"
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
@@ -82,12 +84,12 @@ Section "Install"
 
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${NAME}"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${VERSION}"
-    WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "aaron-gh"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "Wasilewsk"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\${EXE}"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
     WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
     WriteRegStr HKCU "${UNINSTALL_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
-    WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/aaron-gh/accessible-android-emulator"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/Wasilewsk/aae-advanced"
     WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
     WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
 
@@ -99,9 +101,12 @@ SectionEnd
 Section "Uninstall"
     !insertmacro WaitForAAEToClose
     Delete "$SMPROGRAMS\${NAME}.lnk"
+    ; Earlier versions put a differently named shortcut in the Start menu.
+    Delete "$SMPROGRAMS\Accessible Android Emulator.lnk"
     ; Only AAE's own files, by name, in case it was installed in a folder
     ; with others. Devices, Android versions and settings stay in AAE's data
     ; folder.
+    Delete "$INSTDIR\AAEAdvanced.exe"
     Delete "$INSTDIR\AccessibleAndroidEmulator.exe"
     Delete "$INSTDIR\aae.exe"
     Delete "$INSTDIR\aae-helper.apk"

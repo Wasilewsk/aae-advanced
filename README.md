@@ -1,10 +1,14 @@
-# Accessible Android Emulator (AAE)
+# AAE Advanced
 
 Create, run and test Android virtual devices with a screen reader. Each device has a screen reader on from first boot, takes the whole keyboard, and plays its audio through AAE.
 
 Mac and Windows apps, AAE Remote for Android phones, the `aae` command line, and an MCP server for AI agents, on one core. Early development: the Mac app is the most complete; the Windows app is new.
 
+AAE Advanced is a renamed continuation of the [Accessible Android Emulator](https://github.com/aaron-gh/accessible-android-emulator) by aaron-gh, published at [Wasilewsk/aae-advanced](https://github.com/Wasilewsk/aae-advanced). It is the same app, still under the Apache License 2.0, and it keeps AAE's data folder, so devices, Android versions and settings carry over.
+
 ## Getting AAE
+
+AAE Advanced has no builds of its own yet. The installers below are the original project's, and install the same app; [Building](#building) makes AAE Advanced from this source.
 
 - **Mac:** the disk image from the [latest release](https://github.com/aaron-gh/accessible-android-emulator/releases/latest). Apple silicon, macOS 13 or later. Not notarised: on first open, System Settings, Privacy & Security, Open Anyway.
 - **Windows:** `AAE-<version>-windows-x64-setup.exe` from the latest release. Installs per user, no administrator prompt. Windows 10 or 11, 64-bit, Intel or AMD, with Windows Hypervisor Platform on. No Windows on ARM (Google's emulator doesn't support it). Not signed: SmartScreen, More info, Run anyway.
@@ -37,6 +41,13 @@ Below these, Android starts but is too slow to use with a screen reader. Setup a
 - Previews (betas, Canary) only on request: Include Previews in New Device, or `--previews`. 16 KB page images are marked.
 - Google's licence is never accepted automatically. In the apps, Escape declines and Enter does nothing. The CLI saves the licence and takes `--accept-licence`.
 - Installed versions are listed with size and the devices using them. A version used by an AAE device can't be deleted; Android Studio devices using it are named.
+
+### GrapheneOS, /e/OS, LineageOS and other images
+
+- AAE runs Android images built outside Google's catalogue too. `aae import-image <folder|zip|system.img> --rom grapheneos` (or `eos`, `lineageos`, `custom`) copies one into the SDK and labels it, so it appears with the installed versions in `aae images` and the apps' version lists, and devices are made from it with `aae create "My phone" --kind grapheneos`. `--name` shows beside it, such as `--name "LineageOS 23"`; `aae remove-image --api 35 --kind lineageos` deletes it once no device uses it.
+- What to import: an emulator image folder (`system.img`, `vendor.img`, `kernel-ranchu`, `ramdisk.img` and their neighbours), a zip of one, or a single `system.img` to put on an installed version's files with `--base`. `--api` supplies the Android version when the image doesn't say it.
+- None of these projects publishes a ready-made image for Google's emulator: LineageOS makes one with `mka emu_img_zip` (see [its emulator guide](https://wiki.lineageos.org/emulator)), GrapheneOS with its emulator target `sdk_phone64_x86_64` (see [its build guide](https://grapheneos.org/build)), and /e/OS publishes system images for phones, which go on an installed version with `--base`.
+- A phone system image alone may not boot in the emulator: it expects a phone's kernel, vendor interface and partitions. AAE copies and labels what it is given but can't make it compatible, and adds no Google Play or Google services.
 
 ### Devices
 
@@ -189,7 +200,7 @@ aae stop "Android 16 test"
 ```
 
 - Setup: `setup`, `doctor`, `self-test`, `report`.
-- Android versions: `available`, `download`, `images`, `remove-image`.
+- Android versions: `available`, `download`, `import-image`, `images`, `remove-image`.
 - Devices: `list`, `create`, `clone`, `rename`, `hardware`, `export`, `import`, `wipe`, `delete`, `start`, `restart`, `stop`, `status`, `snapshot`.
 - Keyboard, audio and speech: `attach`, `keyboard`, `listen`, `playback-volume`, `audio-output`, `volume`, `key`, `type`, `gesture`, `keytest`, `latency`, `sound-check`, `audio-check`, `mic`, `speech`, `speech-bridge`.
 - Screen readers and apps: `screen-reader`, `services`, `install`, `apps`, `app`, `watch`, `link`, `intent`.
@@ -242,7 +253,7 @@ android/build-remote.sh                              # AAE Remote
 ```
 
 - `macos/build.sh` builds the core, Swift bindings, helper and eSpeak NG into `macos/build/AAE.app`.
-- `windows/build.sh` adds the Rust Windows target if missing, and packages `AccessibleAndroidEmulator.exe`, `aae.exe`, the helper, eSpeak NG, NVDA's controller client, WinSparkle and a read-me into an installer and zip in `windows/dist`.
+- `windows/build.sh` adds the Rust Windows target if missing, and packages `AAEAdvanced.exe`, `aae.exe`, the helper, eSpeak NG, NVDA's controller client, WinSparkle and a read-me into an installer and zip in `windows/dist`.
 - eSpeak NG is built from the `android/third_party/espeak-ng` submodule by `android/build-espeak.sh`, which downloads the NDK. Clone with `--recurse-submodules`, or the script fetches it.
 - Android signing: `~/.android/aae.keystore`, password in `AAE_ANDROID_KEY_PASSWORD` or the Mac Keychain item "AAE Android signing key"; otherwise the debug key. A device copy with another signature is reinstalled.
 - AAE finds the built helper and eSpeak NG when run from this folder, next to `aae` as `aae-helper.apk` and `aae-espeak.apk`, or via `AAE_HELPER_APK` and `AAE_ESPEAK_APK`.

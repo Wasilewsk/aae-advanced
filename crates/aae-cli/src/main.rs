@@ -17,6 +17,7 @@ use aae_core::emulator::{self, StartOptions};
 use aae_core::lifecycle;
 use aae_core::proto::android::emulation::control::phone_call::Operation;
 use aae_core::provision::{self, ProvisionOptions};
+use aae_core::rom::{self, Rom};
 use aae_core::sdk::{self, Sdk};
 use aae_core::{control::Controller, keys};
 use anyhow::{Context, Result, anyhow, bail};
@@ -26,7 +27,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[command(
     name = "aae",
     version,
-    about = "Accessible Android Emulator",
+    about = "AAE Advanced",
     propagate_version = true
 )]
 struct Cli {
@@ -169,6 +170,34 @@ enum Command {
         /// to a file and says where.
         #[arg(long)]
         accept_licence: bool,
+    },
+    /// Install an Android image from outside Google's catalogue: GrapheneOS,
+    /// /e/OS, LineageOS, or one you built yourself.
+    ///
+    /// None of these projects publishes a ready-made image for Google's
+    /// emulator. LineageOS's emulator build makes a zip (`mka emu_img_zip`);
+    /// GrapheneOS builds its `sdk_phone64_x86_64` target; /e/OS publishes phone
+    /// system images, which go on an installed version with --base. A single
+    /// system image may not boot in the emulator: it expects a phone's kernel,
+    /// vendor interface and partitions.
+    ImportImage {
+        /// The image folder, a zip of one (such as LineageOS's emulator build
+        /// makes), or a single system.img to put on an installed version's files.
+        source: PathBuf,
+        /// Which Android it is.
+        #[arg(long, value_enum, default_value = "custom")]
+        rom: RomArg,
+        /// A name to show beside it, such as "LineageOS 23".
+        #[arg(long)]
+        name: Option<String>,
+        /// The Android version, when the image doesn't say, such as 35 or 36.1.
+        #[arg(long)]
+        api: Option<String>,
+        /// For a single system.img: the installed Android version whose
+        /// kernel, ramdisk, vendor and other files it uses, as an API level or
+        /// the image folder aae images lists.
+        #[arg(long)]
+        base: Option<String>,
     },
     /// List your devices and whether each is running.
     List,
@@ -671,6 +700,14 @@ enum Kind {
     Tv,
     /// Google TV.
     GoogleTv,
+    /// GrapheneOS, imported with import-image.
+    Grapheneos,
+    /// /e/OS, imported with import-image.
+    Eos,
+    /// LineageOS, imported with import-image.
+    Lineageos,
+    /// An Android image you imported.
+    Custom,
 }
 
 impl Kind {
@@ -683,7 +720,19 @@ impl Kind {
             Kind::Wear => "android-wear",
             Kind::Tv => "android-tv",
             Kind::GoogleTv => "google-tv",
+            Kind::Grapheneos => "grapheneos",
+            Kind::Eos => "eos",
+            Kind::Lineageos => "lineageos",
+            Kind::Custom => "custom",
         }
+    }
+
+    /// True for images that come from outside Google's catalogue.
+    fn is_rom(self) -> bool {
+        matches!(
+            self,
+            Kind::Grapheneos | Kind::Eos | Kind::Lineageos | Kind::Custom
+        )
     }
 
     fn matches(self, tag: &str) -> bool {
@@ -692,6 +741,32 @@ impl Kind {
             Kind::Google => matches!(tag, "google_apis" | "google_atd"),
             Kind::Play => tag.contains("playstore"),
             Kind::Wear | Kind::Tv | Kind::GoogleTv => tag == self.tag(),
+            Kind::Grapheneos => tag == "grapheneos" || tag.starts_with("grapheneos-"),
+            Kind::Eos => tag == "eos" || tag.starts_with("eos-"),
+            Kind::Lineageos => {
+                tag == "lineageos" || tag == "lineage" || tag.starts_with("lineageos-")
+            }
+            Kind::Custom => tag.starts_with("custom"),
+        }
+    }
+}
+
+/// An Android image from outside Google's catalogue.
+#[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
+enum RomArg {
+    Grapheneos,
+    Eos,
+    Lineageos,
+    Custom,
+}
+
+impl RomArg {
+    fn rom(self) -> Rom {
+        match self {
+            RomArg::Grapheneos => Rom::GrapheneOs,
+            RomArg::Eos => Rom::Eos,
+            RomArg::Lineageos => Rom::LineageOs,
+            RomArg::Custom => Rom::Custom,
         }
     }
 }
@@ -1154,6 +1229,10 @@ async fn run(cli: Cli) -> Result<()> {
             if !previews {
                 println!("Add --previews to include previews of upcoming Android releases.");
             }
+            println!(
+                "For GrapheneOS, /e/OS, LineageOS or an image you build yourself, use aae \
+                 import-image; aae import-image --help says what each needs."
+            );
             Ok(())
         }
         Command::Download {
@@ -1163,6 +1242,22 @@ async fn run(cli: Cli) -> Result<()> {
         } => {
             let image = download_image(&ctx, &api, kind, accept_licence).await?;
             println!("{image} is installed.");
+            Ok(())
+        }
+        Command::ImportImage {
+            source,
+            rom: rom_kind,
+            name,
+            api,
+            base,
+        } => {
+            let image = import_image(&ctx, source, rom_kind, name, api, base).await?;
+            println!(
+                "{image} is installed. Create a device from it with: aae create \"My phone\" \
+                 --api {} --kind {}",
+                image.release.id,
+                rom_kind.rom().tag()
+            );
             Ok(())
         }
         Command::Images => {
@@ -1313,6 +1408,8 @@ async fn run(cli: Cli) -> Result<()> {
             } else {
                 let image = match (pick_image(&ctx.sdk, api.as_deref(), kind), api.as_deref()) {
                     (Ok(image), _) => image,
+                    // Images from outside Google's catalogue are imported, not downloaded.
+                    (Err(e), _) if kind.is_some_and(Kind::is_rom) => return Err(e),
                     // Not installed: download it.
                     (Err(_), Some(api)) => download_image(&ctx, api, kind, accept_licence).await?,
                     (Err(e), None) => return Err(e),
@@ -2744,6 +2841,79 @@ async fn run(cli: Cli) -> Result<()> {
     }
 }
 
+/// Installs an Android image from outside Google's catalogue, with progress
+/// every 10%.
+async fn import_image(
+    ctx: &Ctx,
+    source: PathBuf,
+    rom_kind: RomArg,
+    name: Option<String>,
+    api: Option<String>,
+    base: Option<String>,
+) -> Result<sdk::SystemImage> {
+    let rom = rom_kind.rom();
+    let api = match api.as_deref() {
+        Some(text) => Some(sdk::parse_api_level(text).map(|(api, _)| api).ok_or_else(|| {
+            anyhow!("\"{text}\" isn't an Android version. Use one such as 35 or 36.1.")
+        })?),
+        None => None,
+    };
+    let base = match base.as_deref() {
+        Some(text) => Some(find_base_image(&ctx.sdk, text)?),
+        None => None,
+    };
+    println!("Importing {} from {}.", rom.name(), source.display());
+    let sdk = ctx.sdk.clone();
+    let options = rom::ImportOptions { name, api, base };
+    let installed = tokio::task::spawn_blocking(move || {
+        let mut last = 0;
+        rom::install(&sdk, &source, rom, &options, |p| match p {
+            rom::Progress::Unpacking => println!("Unpacking."),
+            rom::Progress::Copying { .. } => {
+                if let Some(percent) = p.percent() {
+                    if percent >= last + 10 {
+                        last = percent - percent % 10;
+                        println!("Copied {last}%.");
+                    }
+                }
+            }
+        })
+    })
+    .await??;
+    Ok(installed)
+}
+
+/// The installed Android version an imported system image is put on, named by
+/// its API level or the folder `aae images` lists.
+fn find_base_image(sdk: &Sdk, text: &str) -> Result<sdk::SystemImage> {
+    let tidy = |value: &str| value.replace('\\', "/");
+    let wanted = tidy(text.trim()).trim_end_matches('/').to_string();
+    let images = sdk.system_images();
+    let matching: Vec<&sdk::SystemImage> = images
+        .iter()
+        .filter(|i| {
+            i.runs_natively()
+                && (tidy(&i.sysdir).trim_end_matches('/') == wanted || i.release.matches(text))
+        })
+        .collect();
+    match matching.as_slice() {
+        [image] => Ok((*image).clone()),
+        [] => bail!(
+            "No installed Android version matches {text}. aae images lists the installed versions, \
+             and their folders."
+        ),
+        several => bail!(
+            "More than one installed Android version matches {text}: {}. Pass the folder of the \
+             one to use, as aae images lists it.",
+            several
+                .iter()
+                .map(|i| i.sysdir.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
 /// Downloads and installs an Android version from Google, with progress every 10%.
 async fn download_image(
     ctx: &Ctx,
@@ -2752,6 +2922,14 @@ async fn download_image(
     accept_licence: bool,
 ) -> Result<sdk::SystemImage> {
     let kind = kind.unwrap_or(Kind::Google);
+    if kind.is_rom() {
+        bail!(
+            "{} images aren't downloaded from Google. Import one with aae import-image, then \
+             create a device with --kind {}.",
+            aae_core::sdk::image_kind(kind.tag()),
+            kind.tag()
+        );
+    }
     let catalogue = tokio::task::spawn_blocking(|| Catalogue::load(false)).await??;
     let Some(image) = catalogue.find_release(api, kind.tag()).cloned() else {
         let offered: Vec<String> = catalogue

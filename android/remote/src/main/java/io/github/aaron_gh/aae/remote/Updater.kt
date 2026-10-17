@@ -30,8 +30,8 @@ data class Update(val version: String, val build: Long, val url: String, val sha
  * the dev prerelease. A development build is offered the next stable release.
  */
 object Updater {
-    private const val STABLE = "https://raw.githubusercontent.com/aaron-gh/accessible-android-emulator/master/appcast-android.json"
-    private const val DEV = "https://github.com/aaron-gh/accessible-android-emulator/releases/download/dev/AAE-Remote-dev.json"
+    private const val STABLE = "https://raw.githubusercontent.com/Wasilewsk/aae-advanced/master/appcast-android.json"
+    private const val DEV = "https://github.com/Wasilewsk/aae-advanced/releases/download/dev/AAE-Remote-dev.json"
     private const val DAY_MS = 24L * 60 * 60 * 1000
 
     private val main = Handler(Looper.getMainLooper())

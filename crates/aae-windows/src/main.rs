@@ -1,4 +1,4 @@
-//! AAE's Windows app: the Accessible Android Emulator with Windows' own
+//! AAE's Windows app: AAE Advanced with Windows' own
 //! standard controls, over the same core as the Mac app. It's built on the
 //! Mac, cross-compiled with MinGW: see the README.
 
@@ -153,7 +153,7 @@ mod window {
             let hwnd = CreateWindowExW(
                 WS_EX_CONTROLPARENT,
                 w!("AAEMain"),
-                w!("Accessible Android Emulator"),
+                w!("AAE Advanced"),
                 WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
