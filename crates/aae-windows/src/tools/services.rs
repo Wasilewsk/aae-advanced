@@ -9,7 +9,7 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetFocus, VK_F5, VK_R};
 use windows::Win32::UI::WindowsAndMessaging::IDOK;
 
-use crate::app::{self, announce, say, session_for, spawn, with_session};
+use crate::app::{self, announce, session_for, spawn};
 use crate::panels::{self, Handler, Panel};
 use crate::speech::Tone;
 use crate::ui::{self, run_on_ui};
@@ -36,6 +36,7 @@ struct State {
     services: Vec<ServiceInfo>,
     device: Option<(String, bool)>,
     generation: u64,
+    changing: bool,
 }
 
 thread_local! {
@@ -127,78 +128,101 @@ fn load(panel: &Panel) {
 }
 
 fn show_services(services: Vec<ServiceInfo>, status: &str) {
-    STATE.with(|s| {
+    // Sending messages to native controls can synchronously reenter the
+    // window procedure. Never hold a RefCell borrow across those messages.
+    let snapshot = STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.services = services;
-        let Some(c) = s.window else { return };
-        panels::set_text(c.status, status);
-        let readers = screen_readers(&s);
-        let mut items = vec!["None".to_string()];
-        items.extend(readers.iter().map(|r| r.label.clone()));
-        let on = readers.iter().position(|r| r.on).map_or(0, |i| i + 1);
-        ui::set_combo_items(c.reader, &items, on);
-        let rows: Vec<String> = others(&s)
-            .iter()
-            .map(|service| {
-                let state = if service.on { "on" } else { "off" };
-                if service.description.is_empty() {
-                    format!("{}: {state}", service.label)
-                } else {
-                    format!("{}: {state}. {}", service.label, service.description)
-                }
-            })
-            .collect();
-        let selected = ui::list_selection(c.others)
-            .filter(|&i| i < rows.len())
-            .or((!rows.is_empty()).then_some(0));
-        ui::set_list_items(c.others, &rows, selected);
+        s.window.map(|c| (c, screen_readers(&s), others(&s)))
     });
+    let Some((c, readers, others)) = snapshot else {
+        return;
+    };
+    panels::set_text(c.status, status);
+    let mut items = vec!["None".to_string()];
+    items.extend(readers.iter().map(|r| r.label.clone()));
+    let on = readers.iter().position(|r| r.on).map_or(0, |i| i + 1);
+    ui::set_combo_items(c.reader, &items, on);
+    let rows: Vec<String> = others
+        .iter()
+        .map(|service| {
+            let state = if service.on { "on" } else { "off" };
+            format!("{}: {state}. {}", service.label, service.description)
+        })
+        .collect();
+    let selected = ui::list_selection(c.others)
+        .filter(|&i| i < rows.len())
+        .or((!rows.is_empty()).then_some(0));
+    ui::set_list_items(c.others, &rows, selected);
     show_toggle();
 }
 
 /// Names the button after what it does to the selected service.
 fn show_toggle() {
-    STATE.with(|s| {
+    let snapshot = STATE.with(|s| {
         let s = s.borrow();
-        let Some(c) = s.window else { return };
-        let service = ui::list_selection(c.others).and_then(|i| others(&s).get(i).cloned());
-        ui::set_text(
-            c.toggle,
-            match &service {
-                Some(service) if service.on => "Turn Off",
-                Some(_) => "Turn On",
-                None => "Turn On or Off",
-            },
-        );
-        ui::enable(c.toggle, service.is_some());
+        s.window.map(|c| (c, others(&s), s.changing))
     });
+    let Some((c, others, changing)) = snapshot else {
+        return;
+    };
+    let service = ui::list_selection(c.others).and_then(|i| others.get(i));
+    ui::set_text(
+        c.toggle,
+        match service {
+            Some(service) if service.on => "Turn Off",
+            Some(_) => "Turn On",
+            None => "Turn On or Off",
+        },
+    );
+    ui::enable(c.toggle, service.is_some() && !changing);
 }
 
 /// Turns a service on, to stay on, or off. A screen reader turned on
 /// becomes the device's screen reader instead of the one it had.
 fn set_service(service: ServiceInfo, on: bool) {
-    if on && service.screen_reader {
-        announce(&format!("Switching to {}.", service.label), Tone::Info);
-    }
-    with_session(move |session| async move {
-        session.set_service(service.component.clone(), on).await?;
-        if on && service.screen_reader {
-            say(
-                format!("{} is now the screen reader.", service.label),
-                Tone::Success,
-            );
-        } else {
-            let state = if on { "on" } else { "off" };
-            say(format!("{} {state}.", service.label), Tone::Success);
+    let Some(device) = app::selected().0.filter(|d| d.running) else {
+        return;
+    };
+    let ready = STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        if s.changing || s.device.as_ref().map(|d| &d.0) != Some(&device.id) {
+            return false;
         }
-        run_on_ui(|| {
-            panels::press(KIND, REFRESH);
+        s.changing = true;
+        true
+    });
+    if !ready {
+        return;
+    }
+    show_toggle();
+    spawn(async move {
+        let id = device.id;
+        let result = async {
+            session_for(id.clone())
+                .await?
+                .set_service(service.component, on)
+                .await
+        }
+        .await;
+        run_on_ui(move || {
+            STATE.with(|s| s.borrow_mut().changing = false);
+            match result {
+                Ok(()) => announce(
+                    &format!("{} {}.", service.label, if on { "on" } else { "off" }),
+                    Tone::Success,
+                ),
+                Err(e) => announce(&e.to_string(), Tone::Failure),
+            }
+            if app::selected().0.is_some_and(|d| d.id == id) {
+                panels::press(KIND, REFRESH);
+            }
             app::with(|app| {
                 app.refresh();
                 app.render();
             });
+            show_toggle();
         });
-        Ok(())
     });
 }
 
@@ -209,6 +233,9 @@ impl Handler for Window {
         let Some(c) = STATE.with(|s| s.borrow().window) else {
             return;
         };
+        if STATE.with(|s| s.borrow().changing) {
+            return;
+        }
         // Enter acts on the control it's pressed in.
         let id = match id {
             id if id == IDOK.0 as u16 => match unsafe { GetFocus() } {
@@ -270,6 +297,7 @@ impl Handler for Window {
         STATE.with(|s| {
             let mut s = s.borrow_mut();
             s.window = None;
+            s.generation += 1;
             s.services.clear();
         });
     }

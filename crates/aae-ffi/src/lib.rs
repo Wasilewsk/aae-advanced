@@ -890,6 +890,7 @@ pub enum DeviceProfile {
     Phone,
     Tablet,
     Foldable,
+    Tv,
 }
 
 impl From<DeviceProfile> for Profile {
@@ -899,6 +900,7 @@ impl From<DeviceProfile> for Profile {
             DeviceProfile::Phone => Profile::Phone,
             DeviceProfile::Tablet => Profile::Tablet,
             DeviceProfile::Foldable => Profile::Foldable,
+            DeviceProfile::Tv => Profile::Tv,
         }
     }
 }
@@ -3697,4 +3699,94 @@ impl Session {
         *self.device.lock().unwrap() = device;
         Ok(())
     }
+}
+
+/// A Samsung model or country/carrier in SamMobile's catalogue.
+#[derive(uniffi::Record, Clone)]
+pub struct SamsungChoice {
+    pub id: String,
+    pub label: String,
+    pub url: String,
+}
+
+#[derive(uniffi::Record, Clone)]
+pub struct SamsungFirmware {
+    pub model: String,
+    pub country: String,
+    pub product_code: String,
+    pub build: String,
+    pub version: String,
+    pub url: String,
+}
+
+fn samsung_choices(items: Vec<aae_core::samsung::Choice>) -> Result<Vec<SamsungChoice>, AaeError> {
+    items
+        .into_iter()
+        .map(|c| {
+            Ok(SamsungChoice {
+                id: c.id,
+                label: c.value,
+                url: aae_core::samsung::source_url(&c.url)?,
+            })
+        })
+        .collect()
+}
+
+#[uniffi::export]
+pub async fn samsung_models(query: String) -> Result<Vec<SamsungChoice>, AaeError> {
+    on_runtime(async {
+        tokio::task::spawn_blocking(move || samsung_choices(aae_core::samsung::models(&query)?))
+            .await
+            .map_err(|e| AaeError::Failed {
+                message: e.to_string(),
+            })?
+    })
+    .await
+}
+
+#[uniffi::export]
+pub async fn samsung_countries(model: String) -> Result<Vec<SamsungChoice>, AaeError> {
+    on_runtime(async move {
+        tokio::task::spawn_blocking(move || samsung_choices(aae_core::samsung::countries(&model)?))
+            .await
+            .map_err(|e| AaeError::Failed {
+                message: e.to_string(),
+            })?
+    })
+    .await
+}
+
+#[uniffi::export]
+pub async fn samsung_firmwares(
+    model: String,
+    country: String,
+    page: u32,
+) -> Result<Vec<SamsungFirmware>, AaeError> {
+    on_runtime(async move {
+        tokio::task::spawn_blocking(move || {
+            aae_core::samsung::firmwares(&model, &country, page)?
+                .into_iter()
+                .map(|f| {
+                    let version = f
+                        .version
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| f.version.to_string());
+                    Ok(SamsungFirmware {
+                        model: f.model,
+                        country: f.country,
+                        product_code: f.product_code,
+                        build: f.pda,
+                        version: format!("{} {}", f.os.as_deref().unwrap_or("Android"), version),
+                        url: aae_core::samsung::source_url(&f.url)?,
+                    })
+                })
+                .collect()
+        })
+        .await
+        .map_err(|e| AaeError::Failed {
+            message: e.to_string(),
+        })?
+    })
+    .await
 }

@@ -8,6 +8,7 @@ pub mod device_settings;
 pub mod device_window;
 pub mod inspector;
 pub mod links;
+pub mod samsung;
 pub mod serve;
 pub mod services;
 pub mod shell;

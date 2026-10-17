@@ -22,33 +22,41 @@ struct NewDeviceView: View {
         ("Phone", .phone),
         ("Tablet", .tablet),
         ("Foldable", .foldable),
+        ("TV", .tv),
     ]
+
+    private var availableVersions: [VersionInfo] {
+        model.versions.filter { profile == 4 ? $0.form == "TV" : $0.form != "TV" }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("New Device").font(.headline).accessibilityAddTraits(.isHeader)
 
-            if model.versions.isEmpty {
-                Text("No Android versions are available. Check your internet connection and try again.")
+            if availableVersions.isEmpty {
+                Text("No Android versions for this device type are available on this computer. Check your internet connection or choose another type.")
+                Picker("Device type", selection: $profile) {
+                    ForEach(profiles.indices, id: \.self) { Text(profiles[$0].0).tag($0) }
+                }
             } else {
                 TextField("Name", text: $name)
 
                 Picker("Android version", selection: $versionIndex) {
-                    ForEach(model.versions.indices, id: \.self) { index in
-                        Text(versionLabel(model.versions[index])).tag(index)
+                    ForEach(availableVersions.indices, id: \.self) { index in
+                        Text(versionLabel(availableVersions[index])).tag(index)
                     }
                 }
                 .onChange(of: versionIndex) { index in
-                    if model.versions.indices.contains(index) {
-                        chosenID = model.versions[index].id
+                    if availableVersions.indices.contains(index) {
+                        chosenID = availableVersions[index].id
                     }
                     loadDefaults()
                 }
                 // When the list changes, such as with previews turned on, the
                 // version chosen stays chosen.
-                .onChange(of: model.versions.map(\.id)) { ids in
+                .onChange(of: availableVersions.map(\.id)) { ids in
                     versionIndex = chosenID.flatMap { ids.firstIndex(of: $0) }
-                        ?? model.versions.firstIndex(where: \.installed) ?? 0
+                        ?? availableVersions.firstIndex(where: \.installed) ?? 0
                 }
 
                 Toggle("Include previews of upcoming Android releases", isOn: $model.includePreviews)
@@ -56,15 +64,19 @@ struct NewDeviceView: View {
                 // A Googlebook device has one size, a 1920 by 1200 laptop screen.
                 if !isGooglebook {
                     // A Wear OS or TV version always makes a watch or a TV.
-                    if let form = chosenForm {
+                    if let form = chosenForm, form == "Watch" {
                         Text("Size: \(form)")
                     } else {
-                        Picker("Size", selection: $profile) {
+                        Picker("Device type", selection: $profile) {
                             ForEach(profiles.indices, id: \.self) { index in
                                 Text(profiles[index].0).tag(index)
                             }
                         }
-                        .onChange(of: profile) { _ in loadDefaults() }
+                        .onChange(of: profile) { _ in
+                            versionIndex = availableVersions.firstIndex(where: \.installed) ?? 0
+                            chosenID = availableVersions.indices.contains(versionIndex) ? availableVersions[versionIndex].id : nil
+                            loadDefaults()
+                        }
                     }
                     TextField("Memory, in megabytes", text: $memory, prompt: Text(defaults.memory))
                         .accessibilityLabel("Memory, in megabytes")
@@ -95,7 +107,7 @@ struct NewDeviceView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Create and Start", action: create)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || model.versions.isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || availableVersions.isEmpty)
             }
         }
         .padding()
@@ -103,7 +115,7 @@ struct NewDeviceView: View {
         .onAppear {
             screenReader = model.defaultScreenReader
             // Start on the newest installed version, so nothing downloads by surprise.
-            versionIndex = model.versions.firstIndex(where: \.installed) ?? 0
+            versionIndex = availableVersions.firstIndex(where: \.installed) ?? 0
             model.loadVersions()
             loadDefaults()
         }
@@ -111,18 +123,18 @@ struct NewDeviceView: View {
 
     /// AAE's memory, cores and storage for the size and version chosen, shown in empty fields.
     private func loadDefaults() {
-        let tag = model.versions.indices.contains(versionIndex) ? model.versions[versionIndex].tag : ""
+        let tag = availableVersions.indices.contains(versionIndex) ? availableVersions[versionIndex].tag : ""
         defaults = model.defaultHardware(for: profiles[profile].1, tag: tag)
     }
 
     private var isGooglebook: Bool {
-        model.versions.indices.contains(versionIndex) && model.versions[versionIndex].tag == "googlebook"
+        availableVersions.indices.contains(versionIndex) && availableVersions[versionIndex].tag == "googlebook"
     }
 
     /// "Watch" or "TV" for a Wear OS or TV version, which decides the size.
     private var chosenForm: String? {
-        guard model.versions.indices.contains(versionIndex) else { return nil }
-        let form = model.versions[versionIndex].form
+        guard availableVersions.indices.contains(versionIndex) else { return nil }
+        let form = availableVersions[versionIndex].form
         return form.isEmpty ? nil : form
     }
 
@@ -146,7 +158,7 @@ struct NewDeviceView: View {
 
     private func create() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, model.versions.indices.contains(versionIndex) else { return }
+        guard !trimmed.isEmpty, availableVersions.indices.contains(versionIndex) else { return }
         var hardware = HardwareChoice(memoryMb: nil, cores: nil, storageMb: nil)
         if !isGooglebook {
             let fields = [("Memory", memory), ("Processor cores", cores), ("Storage", storage)]
@@ -169,7 +181,7 @@ struct NewDeviceView: View {
         dismiss()
         model.create(
             name: trimmed,
-            version: model.versions[versionIndex],
+            version: availableVersions[versionIndex],
             profile: profiles[profile].1,
             hardware: hardware,
             screenReader: screenReader,
