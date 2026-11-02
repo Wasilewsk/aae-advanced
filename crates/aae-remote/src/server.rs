@@ -757,6 +757,7 @@ async fn call(
                     id.clone(),
                     engine.default_screen_reader(),
                     params["volume_boost"].as_bool().unwrap_or(true),
+                    params["skip_setup_wizard"].as_bool().unwrap_or(true),
                     Arc::new(progress),
                 )
                 .await?;

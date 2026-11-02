@@ -166,7 +166,7 @@ final class AppModel: ObservableObject {
     private var soundProblems: Set<String> = []
     private var soundWatch: Task<Void, Never>?
     /// First-start choices for devices just created, by device id.
-    private var firstStart: [String: (screenReader: String?, volumeBoost: Bool)] = [:]
+    private var firstStart: [String: (screenReader: String?, volumeBoost: Bool, skipSetupWizard: Bool)] = [:]
 
     init() {
         do {
@@ -463,22 +463,22 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func create(name: String, version: VersionInfo, profile: DeviceProfile, hardware: HardwareChoice, screenReader: String?, volumeBoost: Bool) {
+    func create(name: String, version: VersionInfo, profile: DeviceProfile, hardware: HardwareChoice, screenReader: String?, volumeBoost: Bool, skipSetupWizard: Bool) {
         Task {
             var sysdir = version.sysdir
             if !version.installed {
                 guard let installed = await installVersion(version) else { return }
                 sysdir = installed
             }
-            createInstalled(name: name, sysdir: sysdir, profile: profile, hardware: hardware, screenReader: screenReader, volumeBoost: volumeBoost)
+            createInstalled(name: name, sysdir: sysdir, profile: profile, hardware: hardware, screenReader: screenReader, volumeBoost: volumeBoost, skipSetupWizard: skipSetupWizard)
         }
     }
 
-    private func createInstalled(name: String, sysdir: String, profile: DeviceProfile, hardware: HardwareChoice, screenReader: String?, volumeBoost: Bool) {
+    private func createInstalled(name: String, sysdir: String, profile: DeviceProfile, hardware: HardwareChoice, screenReader: String?, volumeBoost: Bool, skipSetupWizard: Bool) {
         guard let engine else { return }
         do {
             let device = try engine.createDevice(name: name, sysdir: sysdir, profile: profile, hardware: hardware)
-            firstStart[device.id] = (screenReader, volumeBoost)
+            firstStart[device.id] = (screenReader, volumeBoost, skipSetupWizard)
             refresh()
             selection = device.id
             announce("Created \(device.name).", tone: .success)
@@ -490,7 +490,7 @@ final class AppModel: ObservableObject {
 
     func start(_ id: String? = nil) {
         guard let engine, let id = id ?? selection, busy[id] == nil else { return }
-        let choices = firstStart[id] ?? (defaultScreenReader, true)
+        let choices = firstStart[id] ?? (defaultScreenReader, true, true)
         busy[id] = "Starting"
         let relay = ProgressRelay { [weak self] message in self?.announce(message) }
         Task {
@@ -499,6 +499,7 @@ final class AppModel: ObservableObject {
                     id: id,
                     screenReaderApk: choices.screenReader,
                     volumeBoost: choices.volumeBoost,
+                    skipSetupWizard: choices.skipSetupWizard,
                     listener: relay
                 )
                 firstStart[id] = nil

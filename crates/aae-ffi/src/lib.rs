@@ -1457,12 +1457,14 @@ impl Engine {
     }
 
     /// Starts a device and waits until it is ready, setting it up on its first
-    /// start. `screen_reader_apk` and `volume_boost` apply only to that first start.
+    /// start. `screen_reader_apk`, `volume_boost` and `skip_setup_wizard`
+    /// apply only to that first start.
     pub async fn start_device(
         &self,
         id: String,
         screen_reader_apk: Option<String>,
         volume_boost: bool,
+        skip_setup_wizard: bool,
         listener: Arc<dyn ProgressListener>,
     ) -> Result<(), AaeError> {
         let (sdk, store) = (self.sdk.clone(), self.store.clone());
@@ -1472,6 +1474,7 @@ impl Engine {
             let setup = ProvisionOptions {
                 screen_reader_apk: screen_reader_apk.map(PathBuf::from),
                 full_volume: volume_boost,
+                skip_setup_wizard,
                 ..Default::default()
             };
             lifecycle::start_device(

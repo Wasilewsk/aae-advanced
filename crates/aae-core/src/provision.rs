@@ -41,6 +41,9 @@ pub struct ProvisionOptions {
     pub full_volume: bool,
     /// Keep the screen on and the lock screen off.
     pub stay_awake: bool,
+    /// Skip Android's setup wizard on first boot, so the desktop appears at
+    /// once. When false, the wizard runs, and the user can step through it.
+    pub skip_setup_wizard: bool,
 }
 
 impl Default for ProvisionOptions {
@@ -51,6 +54,7 @@ impl Default for ProvisionOptions {
             backtalk: false,
             full_volume: true,
             stay_awake: true,
+            skip_setup_wizard: true,
         }
     }
 }
@@ -279,10 +283,14 @@ pub async fn provision(
         .await?;
     apply_keyboard_layout(sdk, adb, crate::keyboard_layouts::for_device(&device.meta)).await?;
 
-    progress(Step::SetupWizard);
-    adb.put_setting("global", "device_provisioned", "1").await?;
-    adb.put_setting("secure", "user_setup_complete", "1")
-        .await?;
+    if options.skip_setup_wizard {
+        progress(Step::SetupWizard);
+        adb.put_setting("global", "device_provisioned", "1").await?;
+        adb.put_setting("secure", "user_setup_complete", "1")
+            .await?;
+        // When the setup wizard isn't skipped, Android marks these itself
+        // as the user finishes it.
+    }
 
     if options.stay_awake {
         progress(Step::StayAwake);

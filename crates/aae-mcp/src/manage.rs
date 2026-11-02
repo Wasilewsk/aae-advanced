@@ -210,6 +210,7 @@ impl AaeServer {
                         device.id.clone(),
                         self.engine.default_screen_reader(),
                         true,
+                        true,
                         steps.clone(),
                     )
                     .await?;

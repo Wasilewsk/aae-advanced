@@ -12,6 +12,7 @@ struct NewDeviceView: View {
     @State private var profile = 1
     @State private var screenReader: String?
     @State private var volumeBoost = true
+    @State private var skipSetupWizard = true
     @State private var memory = ""
     @State private var cores = ""
     @State private var storage = ""
@@ -87,6 +88,11 @@ struct NewDeviceView: View {
                 }
 
                 Toggle("Turn the screen reader's volume up to full", isOn: $volumeBoost)
+
+                // A Googlebook image never shows the setup wizard, so there's nothing to choose.
+                if !isGooglebook {
+                    Toggle("Skip Android's setup wizard on first start", isOn: $skipSetupWizard)
+                }
             }
 
             HStack {
@@ -173,7 +179,8 @@ struct NewDeviceView: View {
             profile: profiles[profile].1,
             hardware: hardware,
             screenReader: screenReader,
-            volumeBoost: volumeBoost
+            volumeBoost: volumeBoost,
+            skipSetupWizard: isGooglebook ? true : skipSetupWizard
         )
     }
 }

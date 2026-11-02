@@ -272,7 +272,7 @@ pub struct App {
     setup_error: Option<String>,
     setting_up: bool,
     /// First-start choices for devices just created, by device id.
-    first_start: HashMap<String, (Option<String>, bool)>,
+    first_start: HashMap<String, (Option<String>, bool, bool)>,
     device_mode: Option<String>,
     gesture_mode: bool,
     sound_problems: HashSet<String>,
@@ -1257,6 +1257,10 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         label: "&Turn the screen reader's volume up to full".into(),
         checked: true,
     })
+    .field(Field::Check {
+        label: "Skip Android's &setup wizard on first start".into(),
+        checked: true,
+    })
     .button("&Choose Screen Reader…", CHOOSE_READER, Role::Action)
     .button("Create and Start", 1, Role::Default)
     .button("Cancel", 0, Role::Cancel);
@@ -1314,6 +1318,7 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         return;
     }
     let volume_boost = answer.values[9].checked();
+    let skip_setup_wizard = answer.values[10].checked();
     let screen_reader = reader.lock().unwrap().clone();
     create_device(
         name,
@@ -1322,6 +1327,7 @@ fn new_device_form(versions: Vec<VersionInfo>, default_reader: Option<String>) {
         hardware,
         screen_reader,
         volume_boost,
+        skip_setup_wizard,
     );
 }
 
@@ -1332,6 +1338,7 @@ fn create_device(
     hardware: HardwareChoice,
     screen_reader: Option<String>,
     volume_boost: bool,
+    skip_setup_wizard: bool,
 ) {
     let Some(engine) = engine() else { return };
     spawn(async move {
@@ -1349,7 +1356,7 @@ fn create_device(
                     let id = device.id.clone();
                     with(|app| {
                         app.first_start
-                            .insert(id.clone(), (screen_reader, volume_boost));
+                            .insert(id.clone(), (screen_reader, volume_boost, skip_setup_wizard));
                         app.refresh();
                         app.selection = Some(id.clone());
                         app.render();
@@ -1422,7 +1429,7 @@ pub(crate) fn start(id: Option<String>) {
             .first_start
             .get(&id)
             .cloned()
-            .unwrap_or_else(|| (engine.default_screen_reader(), true));
+            .unwrap_or_else(|| (engine.default_screen_reader(), true, true));
         app.busy.insert(id.clone(), "Starting".into());
         app.render();
         Some((id, choices))
@@ -1432,7 +1439,7 @@ pub(crate) fn start(id: Option<String>) {
     spawn(async move {
         let result = async {
             engine
-                .start_device(id.clone(), choices.0, choices.1, Arc::new(Progress))
+                .start_device(id.clone(), choices.0, choices.1, choices.2, Arc::new(Progress))
                 .await?;
             session_for(id.clone()).await?;
             Ok::<(), AaeError>(())
