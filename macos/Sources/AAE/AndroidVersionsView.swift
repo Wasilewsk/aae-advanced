@@ -60,6 +60,7 @@ struct AndroidVersionsView: View {
             }
 
             HStack {
+                SamsungMenuItem()
                 Button("Delete…") {
                     if let image = selected { model.removeImage(image) }
                 }

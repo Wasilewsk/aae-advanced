@@ -26,6 +26,7 @@ struct AAEApp: App {
                     .keyboardShortcut("n")
                 Button("Import Device…") { model.importDevice() }
                 AndroidVersionsMenuItem()
+                SamsungMenuItem()
                 ServeMenuItem()
             }
             CommandMenu("Device") {
@@ -131,6 +132,9 @@ struct AAEApp: App {
         Window("Device Log", id: "devicelog") {
             LogView()
                 .environmentObject(model)
+        }
+        Window("Samsung Galaxy Firmware", id: "samsung") {
+            SamsungView()
         }
         Window("Android Versions", id: "versions") {
             AndroidVersionsView()

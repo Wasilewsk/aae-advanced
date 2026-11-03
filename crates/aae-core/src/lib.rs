@@ -37,6 +37,7 @@ pub mod qmp;
 pub mod recording;
 pub mod rom;
 pub mod route;
+pub mod samsung;
 pub mod screenreader;
 pub mod sdk;
 pub mod services;

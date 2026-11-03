@@ -15,6 +15,10 @@ concurrency:
   group: dev-build
   cancel-in-progress: true
 
+env:
+  AAE_BUILD_NUMBER: 1120
+  AAE_VERSION: 0.7.0-dev.1120
+
 permissions:
   contents: write
 
@@ -73,7 +77,7 @@ jobs:
           AAE_ANDROID_KEY_PASSWORD: ${{ secrets.AAE_ANDROID_KEY_PASSWORD }}
           AAE_DIST_NAME: AAE-dev-windows-x64
         run: |
-          export AAE_BUILD_LABEL="development build ${GITHUB_RUN_NUMBER}, from ${GITHUB_SHA::7}"
+          export AAE_BUILD_LABEL="development build 1120, from ${GITHUB_SHA::7}"
           windows/build.sh
           # Only apps signed with AAE's key go out.
           grep -qx aae android/espeak/build/signed-with
@@ -148,7 +152,7 @@ jobs:
           AAE_SIGN_IDENTITY: AAE Code Signing
         run: |
           BASE=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-          export AAE_VERSION="$BASE-dev.${GITHUB_RUN_NUMBER}"
+          export AAE_VERSION="0.7.0-dev.1120"
           macos/build.sh
           grep -qx aae android/espeak/build/signed-with
           # Signed with AAE's certificate, not just for this machine.
@@ -160,7 +164,7 @@ jobs:
           # its development update feed, which phones that want development
           # builds check. Its build number is the commit count, as the APK's.
           android/build-remote.sh macos/dist/AAE-Remote-dev.apk
-          python3 -I - "$AAE_VERSION" "$(git rev-list --count HEAD)" "https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/AAE-Remote-dev.apk" macos/dist/AAE-Remote-dev.apk "$(git log -1 --format=%s)" > macos/dist/AAE-Remote-dev.json <<'PY'
+          python3 -I - "$AAE_VERSION" "$AAE_BUILD_NUMBER" "https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/AAE-Remote-dev.apk" macos/dist/AAE-Remote-dev.apk "$(git log -1 --format=%s)" > macos/dist/AAE-Remote-dev.json <<'PY'
           import hashlib, json, pathlib, sys
           version, build, url, apk, subject = sys.argv[1:]
           print(json.dumps({"version": version, "build": int(build), "url": url,
@@ -196,7 +200,7 @@ jobs:
           SUBJECT=$(git log -1 --format=%s)
           BASE=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           cat > "$RUNNER_TEMP/notes.md" <<NOTES
-          Development build ${GITHUB_RUN_NUMBER} of AAE, made from the latest change on master. It's for testing, before a stable release, and is replaced by each new change.
+          Development build 1120 of AAE 0.7, made from the latest change on master. It's for testing, before a stable release, and is replaced by each new change.
 
           Built from [$SHORT](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}): $SUBJECT
 
@@ -214,7 +218,11 @@ jobs:
 
           ### Mac
 
-          Download AAE-dev.dmg below, open it, and drag AAE to Applications, replacing the AAE you have. It's version $BASE-dev.${GITHUB_RUN_NUMBER}. It's signed like stable releases, so AAE keeps its permissions. Check for Updates doesn't offer development builds; it offers the next stable release when there is one. The first time, macOS may say it can't check AAE: go to System Settings, Privacy & Security, and choose Open Anyway.
+          Download AAE-dev.dmg below, open it, and drag AAE to Applications, replacing the AAE you have. It's version $AAE_VERSION, build 1120. It's signed like stable releases, so AAE keeps its permissions. Check for Updates doesn't offer development builds; it offers the next stable release when there is one. The first time, macOS may say it can't check AAE: go to System Settings, Privacy & Security, and choose Open Anyway.
+
+          ### Linux
+
+          Linux desktop support is planned for a future release. This development release provides Mac and Windows desktop builds.
 
           ### Android: AAE Remote
 

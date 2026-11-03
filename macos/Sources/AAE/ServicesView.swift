@@ -5,6 +5,7 @@ import SwiftUI
 /// switch. What's turned on stays on, and what's turned off stays off.
 struct ServicesView: View {
     @EnvironmentObject var model: AppModel
+    @State private var chosenReader = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -16,13 +17,14 @@ struct ServicesView: View {
             } else {
                 Form {
                     Section {
-                        Picker("Screen reader", selection: screenReader) {
+                        Picker("Screen reader", selection: $chosenReader) {
                             Text("None").tag("")
                             ForEach(screenReaders, id: \.component) { service in
                                 Text(service.label).tag(service.component)
                             }
                         }
-                        .pickerStyle(.radioGroup)
+                        .pickerStyle(.menu)
+                        Button("Use This Screen Reader") { useChosenReader() }
                     } header: {
                         Text("Screen Reader").accessibilityAddTraits(.isHeader)
                     }
@@ -46,14 +48,20 @@ struct ServicesView: View {
                     }
                 }
                 .formStyle(.grouped)
+                .disabled(model.loadingServices || model.changingService)
             }
             Button("Refresh") { model.loadServices() }
+                .disabled(model.changingService)
                 .keyboardShortcut("r")
         }
         .padding()
         .frame(minWidth: 540, minHeight: 440)
         .onAppear { model.loadServices() }
         .onChange(of: model.selection) { _ in model.loadServices() }
+        .onChange(of: model.selected?.running) { _ in model.loadServices() }
+        .onChange(of: model.services.map { "\($0.component):\($0.on)" }) { _ in
+            chosenReader = screenReaders.first(where: \.on)?.component ?? ""
+        }
     }
 
     private var screenReaders: [ServiceInfo] { model.services.filter(\.screenReader) }
@@ -61,19 +69,12 @@ struct ServicesView: View {
 
     /// The screen reader that's on; choosing another switches to it, and None
     /// turns the one that's on off.
-    private var screenReader: Binding<String> {
-        Binding(
-            get: { screenReaders.first(where: \.on)?.component ?? "" },
-            set: { component in
-                if component.isEmpty {
-                    if let current = screenReaders.first(where: \.on) {
-                        model.setService(current, on: false)
-                    }
-                } else if let service = screenReaders.first(where: { $0.component == component }) {
-                    model.setService(service, on: true)
-                }
-            }
-        )
+    private func useChosenReader() {
+        if chosenReader.isEmpty {
+            if let current = screenReaders.first(where: \.on) { model.setService(current, on: false) }
+        } else if let service = screenReaders.first(where: { $0.component == chosenReader }), !service.on {
+            model.setService(service, on: true)
+        }
     }
 
     private var emptyText: String {

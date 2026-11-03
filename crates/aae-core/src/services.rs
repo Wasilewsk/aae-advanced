@@ -58,6 +58,10 @@ pub async fn list(adb: &Adb, device: &Device) -> Result<Vec<Service>> {
         .ok_or_else(|| Error::Adb("AAE's helper sent no answer.".into()))?;
     let mut services: Vec<Service> = serde_json::from_str(json)
         .map_err(|e| Error::Adb(format!("AAE's helper sent a list AAE can't read: {e}")))?;
+    // Stable component identities keep native pickers safe even if Android
+    // reports the same service twice during a package replacement.
+    let mut seen = std::collections::HashSet::new();
+    services.retain(|s| !s.component.is_empty() && seen.insert(s.component.clone()));
     let enabled = adb.enabled_services().await?;
     for service in &mut services {
         service.on = enabled
@@ -126,6 +130,8 @@ pub async fn set(device: &mut Device, adb: &Adb, service: &Service, on: bool) ->
 /// any other, and keeps it on.
 pub async fn use_screen_reader(device: &mut Device, adb: &Adb, service: &Service) -> Result<()> {
     let component = service.component.clone();
+    let previous = device.clone();
+    let previous_enabled = adb.enabled_services().await?;
     // Every other screen reader goes off, the old one included.
     for other in list(adb, device).await? {
         if other.screen_reader && other.on && !same_component(&other.component, &component) {
@@ -151,7 +157,93 @@ pub async fn use_screen_reader(device: &mut Device, adb: &Adb, service: &Service
     device.meta.app_choices.insert(component.clone(), true);
     device.keep_service_enabled(&component);
     device.save_meta()?;
-    adb.ensure_services(std::slice::from_ref(&component), SERVICE_TIMEOUT)
-        .await?;
+    if let Err(error) = adb
+        .ensure_services(std::slice::from_ref(&component), SERVICE_TIMEOUT)
+        .await
+    {
+        // A service that crashes on startup must not leave the device with
+        // the old working reader disabled and the failed choice persisted.
+        let _ = adb.disable_service(&component).await;
+        let _ = adb.enable_services(&previous_enabled).await;
+        *device = previous;
+        device.save_meta()?;
+        return Err(error);
+    }
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[tokio::test]
+    async fn failed_reader_switch_restores_previous_reader_and_preferences() {
+        let dir = std::env::temp_dir().join(format!("aae-reader-rollback-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("adb");
+        // An adb stand-in that accepts settings changes, but fails when AAE
+        // checks whether the newly enabled reader started.
+        std::fs::write(&bin, r#"#!/usr/bin/env python3
+import json, pathlib, shlex, sys
+state = pathlib.Path(__file__).with_name('enabled')
+args = shlex.split(sys.argv[-1])
+if args[:2] == ['am', 'broadcast']:
+    services = [dict(component='old.reader/.Service', label='Old', screenReader=True), dict(component='new.reader/.Service', label='New', screenReader=True)]
+    print('Broadcast completed: result=1, data="' + json.dumps(services) + '"')
+elif args[:4] == ['settings', 'get', '--user', 'current']:
+    print(state.read_text() if state.exists() else '')
+elif args[:2] == ['settings', 'get']:
+    print(state.read_text() if state.exists() else '')
+elif args[:2] == ['settings', 'put'] and 'enabled_accessibility_services' in args:
+    i = args.index('enabled_accessibility_services')
+    state.write_text(args[i+1] if len(args) > i+1 else '')
+elif args[:2] == ['dumpsys', 'accessibility']:
+    sys.exit(1)
+"#).unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(dir.join("enabled"), "old.reader/.Service:helper/.Service").unwrap();
+        let meta = serde_json::from_value(serde_json::json!({
+            "name": "Test", "api": 35, "tag": "google_apis", "abi": "arm64-v8a",
+            "sysdir": "unused", "created": 0, "screen_reader": "old.reader/.Service",
+            "keep_enabled": ["old.reader/.Service", "helper/.Service"],
+            "app_choices": {"old.reader/.Service": true}
+        }))
+        .unwrap();
+        let mut device = Device {
+            id: "test".into(),
+            dir: dir.clone(),
+            meta,
+        };
+        device.save_meta().unwrap();
+        let before = std::fs::read(dir.join("aae.toml")).unwrap();
+        let adb = Adb::new(bin, "test");
+        let service: Service = serde_json::from_value(serde_json::json!({
+            "component": "new.reader/.Service", "label": "New", "screenReader": true
+        }))
+        .unwrap();
+        assert!(
+            use_screen_reader(&mut device, &adb, &service)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            device.meta.screen_reader.as_deref(),
+            Some("old.reader/.Service")
+        );
+        assert_eq!(std::fs::read(dir.join("aae.toml")).unwrap(), before);
+        let enabled = adb.enabled_services().await.unwrap();
+        assert!(
+            enabled
+                .iter()
+                .any(|s| same_component(s, "old.reader/.Service"))
+        );
+        assert!(enabled.iter().any(|s| same_component(s, "helper/.Service")));
+        assert!(
+            !enabled
+                .iter()
+                .any(|s| same_component(s, "new.reader/.Service"))
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

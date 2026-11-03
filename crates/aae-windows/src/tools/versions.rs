@@ -24,6 +24,7 @@ const DELETE: u16 = 1001;
 const REFRESH: u16 = 1002;
 const UPDATE: u16 = 1003;
 const IMPORT: u16 = 1004;
+const SAMSUNG: u16 = 1006;
 
 #[derive(Clone, Copy)]
 struct Controls {
@@ -72,6 +73,7 @@ pub fn show() {
     panel.buttons(
         &[
             ("Import Image…", IMPORT),
+            ("Samsung Galaxy Firmware…", SAMSUNG),
             ("Delete…", DELETE),
             ("Refresh", REFRESH),
         ],
@@ -165,6 +167,7 @@ impl Handler for Window {
         match id {
             REFRESH => load(),
             IMPORT => import(panel.hwnd),
+            SAMSUNG => super::samsung::show(),
             UPDATE => {
                 if let Some(c) = STATE.with(|s| s.borrow().window) {
                     ui::enable(c.update, false);
